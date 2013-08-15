@@ -1,0 +1,37 @@
+name:                  querystring-pickle
+version:               0.1.0
+synopsis:              Type classes, pickling combinators, and GHC.Generics implementations for Query Strings
+license:               OtherLicense
+license-file:          LICENSE
+author:                Brendan Hay
+maintainer:            Brendan Hay <brendan.g.hay@gmail.com>
+copyright:             Copyright (c) 2013 Brendan Hay
+stability:             Experimental
+category:              Data, Network, Web
+build-type:            Simple
+cabal-version:         >= 1.10
+
+description:
+    Type classes, pickling combinators, and GHC.Generics implementations for Query Strings
+
+extra-source-files:
+    README.md
+
+source-repository head
+    type:     git
+    location: git://github.com/brendanhay/querystring-pickle.git
+
+library
+    default-language:  Haskell2010
+    hs-source-dirs:    src
+
+    exposed-modules:
+        Network.HTTP.QueryString
+
+    ghc-options:
+        -Wall
+        -O2
+
+    build-depends:
+        base       > 4 && < 5
+      , bytestring

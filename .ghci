@@ -1,0 +1,5 @@
+:set -isrc
+:set -XDeriveGeneric
+:set -XOverloadedStrings
+
+:load Network.HTTP.QueryString
