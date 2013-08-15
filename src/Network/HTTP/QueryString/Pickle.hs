@@ -86,7 +86,7 @@ instance Monoid Query where
 
 data PU a = PU
     { pickle   :: a -> Query
-    , unpickle :: Query -> Maybe a
+    , unpickle :: Query -> Either String a
     }
 
 data Options = Options
@@ -117,7 +117,7 @@ toQueryString = enc "" . pickle queryPickler
         | BS.null k = enc k' q
         | otherwise = enc (k <> "." <> k') q
 
-fromQueryString :: IsQuery a => [(ByteString, ByteString)] -> Maybe a
+fromQueryString :: IsQuery a => [(ByteString, ByteString)] -> Either String a
 fromQueryString = unpickle queryPickler . List . map reify
   where
     reify :: (ByteString, ByteString) -> Query
@@ -199,21 +199,30 @@ qpWrap (f, g) pua = PU
 qpElem :: ByteString -> PU a -> PU a
 qpElem name pu = PU
     { pickle   = Pair name . pickle pu
-    , unpickle = (unpickle pu =<<) . findPair name
+    , unpickle = (unpickle pu =<<) . annotate . findPair name
     }
+  where
+    findPair k qry
+        | List qs <- qry           = listToMaybe . catMaybes $ map (findPair k) qs
+        | Pair k' q <- qry, k == k' = Just q
+        | otherwise               = Nothing
+
+    annotate = note ("qpElem: non-locatable - " <> BS.unpack name)
 
 qpPair :: PU a -> PU b -> PU (a, b)
 qpPair pua pub = PU
     { pickle   = \(a, b) -> pickle pua a <> pickle pub b
     , unpickle = \qry -> case (unpickle pua qry, unpickle pub qry) of
-          (Just a, Just b) -> Just (a, b)
-          _                -> Nothing
+          (Right a, Right b) -> Right (a, b)
+          (Left ea, Right _) -> Left $ "qpPair: left - " ++ ea
+          (Right _, Left eb) -> Left $ "qpPair: right - " ++ eb
+          (Left ea, Left eb) -> Left $ "qpPair: both - " ++ show (ea, eb)
     }
 
 qpLift :: a -> PU a
 qpLift x = PU
     { pickle   = const $ List []
-    , unpickle = const $ Just x
+    , unpickle = const $ Right x
     }
 
 qpConst :: ByteString -> PU a -> PU a
@@ -226,14 +235,15 @@ qpPrim :: (Read a, Show a) => PU a
 qpPrim = PU
     { pickle   = Value . BS.pack . show
     , unpickle = \qry -> case qry of
-          (Value v) -> maybeRead $ BS.unpack v
-          _         -> Nothing
+          (Value x) -> let v = BS.unpack x
+                      in note ("qpPrim: failed reading - " ++ v) $ maybeRead v
+          _         -> Left $ "qpPrim: unexpected non-value - " ++ show qry
     }
 
 qpOption :: PU a -> PU (Maybe a)
 qpOption pu = PU
-    { pickle   = maybe (List []) (pickle pu)
-    , unpickle = Just . unpickle pu
+    { pickle   = maybe (List []) $ pickle pu
+    , unpickle = fmap Just . unpickle pu
     }
 
 qpSum :: PU (f r) -> PU (g r) -> PU ((f :+: g) r)
@@ -248,11 +258,13 @@ qpSum left right = (inp, out) `qpWrap` qpEither left right
 qpEither :: PU a -> PU b -> PU (Either a b)
 qpEither pua pub = PU pickleEither unpickleEither
   where
-    unpickleEither qry = case unpickle pua qry of
-        Just x -> Just $ Left x
-        _      -> case unpickle pub qry of
-            Just y -> Just $ Right y
-            _      -> Nothing
+    unpickleEither qry = either
+        (handleFailure qry)
+        (Right . Left) $ unpickle pua qry
+
+    handleFailure qry err1 = either
+        (\err2 -> Left $ "qpEither: both failed - " ++ err1 ++ " - " ++ err2)
+        (Right . Right) $ unpickle pub qry
 
     pickleEither (Left  x) = pickle pua x
     pickleEither (Right y) = pickle pub y
@@ -274,11 +286,8 @@ maybeRead s = case reads s of
     [(x, "")] -> Just x
     _         -> Nothing
 
-findPair :: ByteString -> Query -> Maybe Query
-findPair k qry
-    | List qs <- qry           = listToMaybe . catMaybes $ map (findPair k) qs
-    | Pair k' q <- qry, k == k' = Just q
-    | otherwise               = Nothing
+note :: a -> Maybe b -> Either a b
+note a = maybe (Left a) Right
 
 --
 -- Instances
@@ -303,6 +312,6 @@ instance IsQuery ByteString where
     queryPickler = PU
         { pickle   = Value
         , unpickle = \qry -> case qry of
-              (Value v) -> Just v
-              _         -> Nothing
+              (Value v) -> Right v
+              _         -> Left $ "qpByteString: unexpected non-value - " ++ show qry
         }

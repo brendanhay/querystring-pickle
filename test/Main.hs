@@ -48,7 +48,7 @@ type Qry a = TestQuery a -> Bool
 data TestQuery a = TestQuery
     { input   :: a
     , interim :: [(ByteString, ByteString)]
-    , output  :: Maybe a
+    , output  :: Either String a
     } deriving (Show)
 
 instance (Eq a, Arbitrary a, IsQuery a) => Arbitrary (TestQuery a) where
@@ -57,4 +57,4 @@ instance (Eq a, Arbitrary a, IsQuery a) => Arbitrary (TestQuery a) where
         return $ TestQuery i (toQueryString i) (fromQueryString $ toQueryString i)
 
 query :: (Eq a, Arbitrary a, IsQuery a) => TestQuery a -> Bool
-query (TestQuery i m o) = maybe False (== i) o
+query (TestQuery i m o) = either (const False) (== i) o
