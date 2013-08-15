@@ -1,13 +1,15 @@
-{-# LANGUAGE DefaultSignatures   #-}
-{-# LANGUAGE DeriveGeneric       #-}
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE FlexibleInstances   #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeOperators       #-}
-{-# LANGUAGE PatternGuards       #-}
+{-# LANGUAGE DefaultSignatures      #-}
+{-# LANGUAGE DeriveGeneric          #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE KindSignatures         #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE OverlappingInstances   #-}
+{-# LANGUAGE OverloadedStrings      #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE TypeOperators          #-}
 
--- |
 -- Module      : Network.HTTP.QueryString
 -- Copyright   : (c) 2013 Brendan Hay <brendan.g.hay@gmail.com>
 -- License     : This Source Code Form is subject to the terms of
@@ -18,186 +20,59 @@
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 
-module Network.HTTP.QueryString where
-    -- (
-    -- -- * Types
-    --   ToQuery (..)
-    -- , Query   (..)
+module Network.HTTP.QueryString
+    (
+    -- * Class
+      IsQuery (..)
 
-    -- -- * Query Param Wrappers
-    -- , Params(..)
+    -- * Functions
+    , toQuery
+    , fromQuery
+    , joinQuery
+    , breakQuery
 
-    -- -- * Functions
-    -- , queryString
+    -- * Data Types
+    , Query (..)
+    , PU (..)
 
-    -- -- * Defining Queries
-    -- , loweredQuery
-    -- , genericQuery
-    -- , packQS
-    -- ) where
+    -- * Options
+    , Options (..)
+    , defaultOptions
+    , loweredOptions
 
-import           Control.Applicative
-import           Control.Arrow         (second)
+    -- * Generics
+    , genericQueryPickler
+
+    -- * Combinators
+    , qpWrap
+    , qpElem
+    , qpPair
+    , qpLift
+    , qpConst
+    , qpPrim
+    , qpOption
+    , qpSum
+    , qpEither
+    , qpOrdinalList
+    ) where
+
 import           Data.ByteString       (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import           Data.Char             (isLower, toLower)
-import           Data.Foldable         (Foldable)
 import           Data.List             (sort)
 import           Data.Maybe
 import           Data.Monoid
-import           Data.Traversable      (Traversable)
 import           GHC.Generics
 
--- instance IsXML UTCTime where
---     xmlPickler = xpPrim
-
--- instance IsXML Bool where
---     xmlPickler = (inp, out) `xpWrap` xpContent xpText
---       where
---         inp (lower -> "true")  = True
---         inp (lower -> "false") = False
---         inp _ = error "No parse for bool in toBool (XmlPickler)."
-
---         out True  = "true"
---         out False = "false"
-
---         lower = BS.map toLower
-
 --
--- Functions
+-- Types
 --
 
-toQueryString :: IsQuery a => a -> [(ByteString, ByteString)]
-toQueryString = enc "" . pickle queryPickler
-  where
-    enc _ (List []) = []
-    enc k (List qs) = concatMap (enc k) qs
-    enc k (Value v) = [(k, v)]
-    enc k (Pair k' q)
-        | BS.null k = enc k' q
-        | otherwise = enc (k <> "." <> k') q
+class IsQuery a where
+    queryPickler :: PU a
 
--- fromQueryString :: IsQuery a => [(ByteString, ByteString)] -> Maybe a
-fromQueryString :: [(ByteString, ByteString)] -> Query
-fromQueryString = List . map reify
-  where
-    reify :: (ByteString, ByteString) -> Query
-    reify (k, v)
-        | '.' `BS.elem` k = let ks = BS.split '.' k
-                                f k' qry = Pair k' qry
-                             -- foldr :: (a -> b -> b) -> b -> [a] -> b
-                             in foldr f (Pair (last ks) $ Value v) $ init ks
-        | otherwise    = Pair k $ Value v
-
-joinQuerystring :: (ByteString -> ByteString)  -- ^ URL Value Encoder
-                -> [(ByteString, ByteString)] -- ^ Key/Value Pairs
-                -> ByteString
-joinQuerystring f = BS.intercalate "&"
-    . map (\(k, v) -> mconcat [k, "=", f v])
-    . sort
-
-breakQueryString :: (ByteString -> ByteString) -- ^ URL Value Decoder
-                 -> ByteString                -- ^ Input Query String
-                 -> [(ByteString, ByteString)]
-breakQueryString f = map (pair . BS.split '=')
-    . BS.split '&'
-    . BS.dropWhile (\c -> c == '/' || c == '?')
-  where
-    pair (k:vs) = (k, f $ BS.intercalate "=" vs)
-
---
--- Defining Queries
---
-
-loweredQuery :: Options
-loweredQuery = defaultOptions
-    { fieldLabelModifier = map toLower . dropWhile isLower
-    }
-
--- genericQueryPickler :: (Generic a, GIsQuery (Rep a)) => Options -> PU a
-
-
---
--- Instances
---
-
-instance IsQuery a => IsQuery (Maybe a) where
-    queryPickler = qpOption queryPickler
-
-instance IsQuery () where
-    queryPickler = qpLift ()
-
--- instance IsQuery a => IsQuery [a] where
---     toQuery = List . zipWith (\n -> Pair (toBS n) . toQuery) ([1..] :: [Integer])
-
-instance IsQuery Int where
-    queryPickler = qpPrim
-
-instance IsQuery Integer where
-    queryPickler = qpPrim
-
-instance IsQuery Bool where
-    queryPickler = qpPrim
-
-instance IsQuery ByteString where
-    queryPickler = PU
-        { pickle   = Value
-        , unpickle = \qry -> case qry of
-              (Value v) -> Just v
-              _         -> Nothing
-        }
-
-
-
--- --
--- -- Wrappers
--- --
-
--- newtype Params b a = Params { unParams :: [a] }
---     deriving (Functor, Foldable, Traversable, Show, Generic)
-
--- instance (IsQuery a, Show b) => IsQuery (Params b a) where
---     toQuery (Params xs) =
---         Pair (BS.pack . map toLower $ show (undefined :: b)) $ toQuery xs
-
--- instance Eq a => Eq (Params b a) where
---     a == b = unParams a == unParams b
-
--- data Member
-
--- instance Show Member where
---     show _ = "member"
-
---
--- Test
---
-
-data Qux
-    = Corge
-    | Grault
-    | Waldo
-      deriving (Show, Generic)
-
-instance IsQuery Qux
-
-data Foo = Foo
-    { fooString :: ByteString
-    , fooInt    :: Int
-    } deriving (Show, Generic)
-
-instance IsQuery Foo
-
-data Bar = Bar
-    { barString :: ByteString
-    , barFoo    :: Foo
-    , barQux    :: Qux
-    } deriving (Show, Generic)
-
-instance IsQuery Bar
-
---
--- Class
---
+    default queryPickler :: (Generic a, GIsQuery (Rep a)) => PU a
+    queryPickler = genericQueryPickler defaultOptions
 
 data Query
     = List [Query]
@@ -214,16 +89,6 @@ data PU a = PU
     , unpickle :: Query -> Maybe a
     }
 
-class IsQuery a where
-    queryPickler :: PU a
-
-    default queryPickler :: (Generic a, GIsQuery (Rep a)) => PU a
-    queryPickler = genericQueryPickler defaultOptions
-
---
--- Defining Picklers
---
-
 data Options = Options
     { constructorTagModifier :: String -> String
       -- ^ Function applied to constructor tags.
@@ -234,8 +99,112 @@ data Options = Options
 defaultOptions :: Options
 defaultOptions = Options id (dropWhile isLower)
 
+loweredOptions :: Options
+loweredOptions = defaultOptions
+    { fieldLabelModifier = map toLower . dropWhile isLower
+    }
+
+--
+-- Functions
+--
+
+toQuery :: IsQuery a => a -> IO [(ByteString, ByteString)]
+-- toQuery :: IsQuery a => a -> Query
+toQuery x = do
+     let qry = pickle queryPickler x
+
+     print qry
+
+     return $ enc "" qry
+  where
+    -- Pair "Bar" (
+    --    List [
+    --      Pair "Foo" (
+    --           Pair "Member" (
+    --               Pair "Int" (Value "3")
+    --           )
+    --      )
+    --    , Pair "Qux" (
+    --         Pair "Corge" (List [])
+    --      )
+    --    ]
+    -- )
+
+    enc k (List qs) = concatMap (enc k) qs
+    enc k (Value v) = [(k, v)]
+    enc k (Pair k' q)
+        | BS.null k = enc k' q
+        | otherwise = enc (k <> "." <> k') q
+
+-- fromQuery :: IsQuery a => [(ByteString, ByteString)] -> Maybe a
+fromQuery :: [(ByteString, ByteString)] -> Query
+fromQuery = List . map reify
+  where
+    reify :: (ByteString, ByteString) -> Query
+    reify (k, v)
+        | '.' `BS.elem` k = let ks = BS.split '.' k
+                                f k' qry = Pair k' qry
+                             -- foldr :: (a -> b -> b) -> b -> [a] -> b
+                             in foldr f (Pair (last ks) $ Value v) $ init ks
+        | otherwise    = Pair k $ Value v
+
+joinQuery :: (ByteString -> ByteString)  -- ^ URL Value Encoder
+          -> [(ByteString, ByteString)] -- ^ Key/Value Pairs
+          -> ByteString
+joinQuery f = BS.intercalate "&"
+    . map (\(k, v) -> mconcat [k, "=", f v])
+    . sort
+
+breakQuery :: (ByteString -> ByteString) -- ^ URL Value Decoder
+           -> ByteString                -- ^ Input Query String
+           -> [(ByteString, ByteString)]
+breakQuery f = map (pair . BS.split '=')
+    . BS.split '&'
+    . BS.dropWhile (\c -> c == '/' || c == '?')
+  where
+    pair (k:vs) = (k, f $ BS.intercalate "=" vs)
+
+--
+-- Generics
+--
+
 genericQueryPickler opts =
     (to, from) `qpWrap` (gQueryPickler opts) (genericQueryPickler opts)
+
+class GIsQuery f where
+    gQueryPickler :: Options -> PU a -> PU (f a)
+
+instance IsQuery a => GIsQuery (K1 i a) where
+    gQueryPickler _ _ = (K1, unK1) `qpWrap` queryPickler
+
+instance GIsQuery U1 where
+    gQueryPickler _ _ = (const U1, const ()) `qpWrap` qpLift ()
+
+instance (GIsQuery f, GIsQuery g) => GIsQuery (f :+: g) where
+    gQueryPickler opts f = gQueryPickler opts f `qpSum` gQueryPickler opts f
+
+instance (GIsQuery f, GIsQuery g) => GIsQuery (f :*: g) where
+    gQueryPickler opts f = qpWrap
+        (uncurry (:*:), \(a :*: b) -> (a, b))
+        (gQueryPickler opts f `qpPair` gQueryPickler opts f)
+
+instance (Datatype d, GIsQuery f) => GIsQuery (D1 d f) where
+    gQueryPickler opts = qpWrap (M1, unM1) . gQueryPickler opts
+
+instance (Constructor c, GIsQuery f) => GIsQuery (C1 c f) where
+    gQueryPickler opts f = qpElem
+        (BS.pack . constructorTagModifier opts $ conName (undefined :: C1 c f r))
+        ((M1, unM1) `qpWrap` gQueryPickler opts f)
+
+instance (Selector s, GIsQuery f) => GIsQuery (S1 s f) where
+    gQueryPickler opts f = qpElem
+        (BS.pack . fieldLabelModifier opts $ selName (undefined :: S1 s f r))
+        ((M1, unM1) `qpWrap` gQueryPickler opts f)
+
+instance Constructor c => GIsQuery (C1 c U1) where
+    gQueryPickler opts = qpConst x . qpWrap (M1, unM1) . gQueryPickler opts
+     where
+       x = BS.pack $ conName (undefined :: t c U1 p)
 
 --
 -- Combinators
@@ -265,6 +234,12 @@ qpLift :: a -> PU a
 qpLift x = PU
     { pickle   = const $ List []
     , unpickle = const $ Just x
+    }
+
+qpConst :: ByteString -> PU a -> PU a
+qpConst name pu = PU
+    { pickle   = const $ Value name
+    , unpickle = const . unpickle pu $ Value name
     }
 
 qpPrim :: (Read a, Show a) => PU a
@@ -302,6 +277,18 @@ qpEither pua pub = PU pickleEither unpickleEither
     pickleEither (Left  x) = pickle pua x
     pickleEither (Right y) = pickle pub y
 
+qpOrdinalList :: IsQuery a => PU [a]
+qpOrdinalList = PU
+    { pickle = List . zipWith pick ([1..] :: [Integer])
+    , unpickle = undefined
+    }
+  where
+    pick n x = case pickle queryPickler x of
+        (Pair k v) -> Pair k (Pair k' v)
+        other      -> (Pair k' other)
+      where
+        k' = BS.pack $ show n
+
 maybeRead :: Read a => String -> Maybe a
 maybeRead s = case reads s of
     [(x, "")] -> Just x
@@ -317,134 +304,28 @@ findPair k qry
     | otherwise               = Nothing
 
 --
--- Generics
+-- Instances
 --
 
-class GIsQuery f where
-    gQueryPickler :: Options -> PU a -> PU (f a)
+instance IsQuery a => IsQuery (Maybe a) where
+    queryPickler = qpOption queryPickler
 
-instance IsQuery a => GIsQuery (K1 i a) where
-    gQueryPickler _ _ = (K1, unK1) `qpWrap` queryPickler
+instance (IsQuery a, IsQuery b) => IsQuery (Either a b) where
+    queryPickler = qpEither queryPickler queryPickler
 
-instance GIsQuery U1 where
-    gQueryPickler _ _ = (const U1, const ()) `qpWrap` qpLift ()
+instance IsQuery () where
+    queryPickler = qpLift ()
 
-instance (Datatype d, GIsQuery f) => GIsQuery (M1 D d f) where
-    gQueryPickler opts = qpWrap (M1, unM1) . gQueryPickler opts
+instance IsQuery Int where
+    queryPickler = qpPrim
 
-instance (GIsQuery f, GIsQuery g) => GIsQuery (f :+: g) where
-    gQueryPickler opts f = gQueryPickler opts f `qpSum` gQueryPickler opts f
+instance IsQuery Integer where
+    queryPickler = qpPrim
 
-instance (GIsQuery f, GIsQuery g) => GIsQuery (f :*: g) where
-    gQueryPickler opts f = qpWrap
-        (uncurry (:*:), \(a :*: b) -> (a, b))
-        (gQueryPickler opts f `qpPair` gQueryPickler opts f)
-
-instance (Constructor c, GIsQuery f) => GIsQuery (M1 C c f) where
-    gQueryPickler opts f = qpElem
-        (BS.pack . constructorTagModifier opts $ conName (undefined :: M1 C c f r))
-        ((M1, unM1) `qpWrap` gQueryPickler opts f)
-
-instance (Selector s, GIsQuery f) => GIsQuery (M1 S s f) where
-    gQueryPickler opts f = qpElem
-        (BS.pack . fieldLabelModifier opts $ selName (undefined :: M1 S s f r))
-        ((M1, unM1) `qpWrap` gQueryPickler opts f)
-
--- instance GIsQuery a => GIsQuery(M1 i c a) where
---     gQueryPickler opts = gQueryPickler opts . unM1
-
--- instance IsQuery a => GIsQuery (K1 i a) where
---     gQueryPickler _ = Query . unK1
-
--- instance GIsQuery U1 where
---     gQueryPickler _ _ _ = Null
-
--- instance ConsIsQuery a => GIsQuery (C1 c a) where
---     gQueryPickler opts = consIsQuery opts . unM1
-
--- instance ( AllNullary (f :+: g) allNullary
---          , SumIsQuery (f :+: g) allNullary
---          ) => GIsQuery (f :+: g) where
---     gQueryPickler opts =
---         (unTagged :: Tagged allNullary Query -> Query) . sumIsQuery opts
-
--- class SumIsQuery f allNullary where
---     sumIsQuery :: Options -> f a -> Tagged allNullary Query
-
--- instance GetConName f => SumIsQuery f True where
---     sumIsQuery _ = Tagged . Value . BS.pack . getConName
-
--- class ConsIsQuery f where
---     consIsQuery :: Options -> f a -> Query
-
--- class ConsIsQuery' f isRecord where
---     consIsQuery' :: Options -> f a -> Tagged isRecord Query
-
--- instance (IsRecord f isRecord, ConsIsQuery' f isRecord) => ConsIsQuery f where
---     consIsQuery opts =
---         (unTagged :: Tagged isRecord Query -> Query) . consIsQuery' opts
-
--- instance RecordToPairs f => ConsIsQuery' f True where
---     consIsQuery' opts = Tagged . recordToPairs opts
-
--- instance GIsQuery f => ConsIsQuery' f False where
---     consIsQuery' opts = Tagged . gQueryPickler opts
-
--- class RecordToPairs f where
---     recordToPairs :: Options -> f a -> Query
-
--- instance (RecordToPairs a, RecordToPairs b) => RecordToPairs (a :*: b) where
---     recordToPairs opts (a :*: b) = recordToPairs opts a <> recordToPairs opts b
-
--- instance (Selector s, GIsQuery a) => RecordToPairs (S1 s a) where
---     recordToPairs = fieldToPair
-
--- instance (Selector s, IsQuery a) => RecordToPairs (S1 s (K1 i (Maybe a))) where
---     recordToPairs = fieldToPair
-
--- fieldToPair :: (Selector s, GIsQuery a) => Options -> S1 s a p -> Query
--- fieldToPair opts m1 = Pair
---     (BS.pack . fieldLabelModifier opts $ selName m1)
---     (gQueryPickler opts $ unM1 m1)
-
--- class GetConName f where
---     getConName :: f a -> String
-
--- instance (GetConName a, GetConName b) => GetConName (a :+: b) where
---     getConName (L1 x) = getConName x
---     getConName (R1 x) = getConName x
-
--- instance (Constructor c, GIsQuery a) => GetConName (C1 c a) where
---     getConName = conName
-
--- class IsRecord (f :: * -> *) isRecord | f -> isRecord
-
--- instance (IsRecord f isRecord) => IsRecord (f :*: g) isRecord
--- instance IsRecord (M1 S NoSelector f) False
--- instance (IsRecord f isRecord) => IsRecord (M1 S c f) isRecord
--- instance IsRecord (K1 i c) True
--- instance IsRecord U1 False
-
--- class AllNullary (f :: * -> *) allNullary | f -> allNullary
-
--- instance ( AllNullary a allNullaryL
---          , AllNullary b allNullaryR
---          , And allNullaryL allNullaryR allNullary
---          ) => AllNullary (a :+: b) allNullary
-
--- instance AllNullary a allNullary => AllNullary (M1 i c a) allNullary
--- instance AllNullary (a :*: b) False
--- instance AllNullary (K1 i c) False
--- instance AllNullary U1 True
-
--- data True
--- data False
-
--- class And bool1 bool2 bool3 | bool1 bool2 -> bool3
-
--- instance And True  True  True
--- instance And False False False
--- instance And False True  False
--- instance And True  False False
-
--- newtype Tagged s b = Tagged { unTagged :: b }
+instance IsQuery ByteString where
+    queryPickler = PU
+        { pickle   = Value
+        , unpickle = \qry -> case qry of
+              (Value v) -> Just v
+              _         -> Nothing
+        }

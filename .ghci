@@ -3,3 +3,27 @@
 :set -XOverloadedStrings
 
 :load Network.HTTP.QueryString
+:load Network.HTTP.QueryString.Common
+
+import System.IO
+import Network.HTTP.QueryString.Common
+import GHC.Generics
+
+hSetBuffering stdout LineBuffering
+
+data Qux = Corge | Grault | Waldo deriving (Show, Generic)
+
+instance IsQuery Qux
+
+data Member = Member { fooInt :: Int } deriving (Show, Generic)
+
+instance IsQuery Member
+
+data Bar = Bar { barFoo :: Member, barQux :: Qux, barQaz :: [Member] } deriving (Show, Generic)
+
+instance IsQuery Bar
+
+let f = Bar (Member 3) Corge [Member 1, Member 2]
+
+
+-- toQueryString f
