@@ -26,7 +26,7 @@ library
     hs-source-dirs:    src
 
     exposed-modules:
-        Network.HTTP.QueryString
+        Network.HTTP.QueryString.Pickle
 
     ghc-options:
         -Wall

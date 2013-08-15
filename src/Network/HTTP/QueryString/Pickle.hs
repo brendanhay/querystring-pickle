@@ -10,7 +10,7 @@
 {-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE TypeOperators          #-}
 
--- Module      : Network.HTTP.QueryString
+-- Module      : Network.HTTP.QueryString.Pickle
 -- Copyright   : (c) 2013 Brendan Hay <brendan.g.hay@gmail.com>
 -- License     : This Source Code Form is subject to the terms of
 --               Berkeley Software Distribution License, v. 3.0.
@@ -20,16 +20,16 @@
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 
-module Network.HTTP.QueryString
+module Network.HTTP.QueryString.Pickle
     (
     -- * Class
       IsQuery (..)
 
     -- * Functions
-    , toQuery
-    , fromQuery
-    , joinQuery
-    , breakQuery
+    , encode
+    , decode
+    , toQueryString
+    , fromQueryString
 
     -- * Data Types
     , Query (..)
@@ -108,9 +108,9 @@ loweredOptions = defaultOptions
 -- Functions
 --
 
-toQuery :: IsQuery a => a -> IO [(ByteString, ByteString)]
+encode :: IsQuery a => a -> IO [(ByteString, ByteString)]
 -- toQuery :: IsQuery a => a -> Query
-toQuery x = do
+encode x = do
      let qry = pickle queryPickler x
 
      print qry
@@ -136,9 +136,9 @@ toQuery x = do
         | BS.null k = enc k' q
         | otherwise = enc (k <> "." <> k') q
 
--- fromQuery :: IsQuery a => [(ByteString, ByteString)] -> Maybe a
-fromQuery :: [(ByteString, ByteString)] -> Query
-fromQuery = List . map reify
+-- decode :: IsQuery a => [(ByteString, ByteString)] -> Maybe a
+decode :: [(ByteString, ByteString)] -> Query
+decode = List . map reify
   where
     reify :: (ByteString, ByteString) -> Query
     reify (k, v)
@@ -148,17 +148,17 @@ fromQuery = List . map reify
                              in foldr f (Pair (last ks) $ Value v) $ init ks
         | otherwise    = Pair k $ Value v
 
-joinQuery :: (ByteString -> ByteString)  -- ^ URL Value Encoder
-          -> [(ByteString, ByteString)] -- ^ Key/Value Pairs
-          -> ByteString
-joinQuery f = BS.intercalate "&"
+toQueryString :: (ByteString -> ByteString)  -- ^ URL Value Encoder
+     -> [(ByteString, ByteString)] -- ^ Key/Value Pairs
+     -> ByteString
+toQueryString f = BS.intercalate "&"
     . map (\(k, v) -> mconcat [k, "=", f v])
     . sort
 
-breakQuery :: (ByteString -> ByteString) -- ^ URL Value Decoder
-           -> ByteString                -- ^ Input Query String
-           -> [(ByteString, ByteString)]
-breakQuery f = map (pair . BS.split '=')
+fromQueryString :: (ByteString -> ByteString) -- ^ URL Value Decoder
+        -> ByteString                -- ^ Input Query String
+        -> [(ByteString, ByteString)]
+fromQueryString f = map (pair . BS.split '=')
     . BS.split '&'
     . BS.dropWhile (\c -> c == '/' || c == '?')
   where
