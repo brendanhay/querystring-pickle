@@ -26,10 +26,10 @@ module Network.HTTP.QueryString.Pickle
       IsQuery (..)
 
     -- * Functions
-    , encode
-    , decode
     , toQueryString
     , fromQueryString
+    , encode
+    , decode
 
     -- * Data Types
     , Query (..)
@@ -108,37 +108,17 @@ loweredOptions = defaultOptions
 -- Functions
 --
 
-encode :: IsQuery a => a -> IO [(ByteString, ByteString)]
--- toQuery :: IsQuery a => a -> Query
-encode x = do
-     let qry = pickle queryPickler x
-
-     print qry
-
-     return $ enc "" qry
+toQueryString :: IsQuery a => a -> [(ByteString, ByteString)]
+toQueryString = enc "" . pickle queryPickler
   where
-    -- Pair "Bar" (
-    --    List [
-    --      Pair "Foo" (
-    --           Pair "Member" (
-    --               Pair "Int" (Value "3")
-    --           )
-    --      )
-    --    , Pair "Qux" (
-    --         Pair "Corge" (List [])
-    --      )
-    --    ]
-    -- )
-
     enc k (List qs) = concatMap (enc k) qs
     enc k (Value v) = [(k, v)]
     enc k (Pair k' q)
         | BS.null k = enc k' q
         | otherwise = enc (k <> "." <> k') q
 
--- decode :: IsQuery a => [(ByteString, ByteString)] -> Maybe a
-decode :: [(ByteString, ByteString)] -> Query
-decode = List . map reify
+fromQueryString :: IsQuery a => [(ByteString, ByteString)] -> Maybe a
+fromQueryString = unpickle queryPickler . List . map reify
   where
     reify :: (ByteString, ByteString) -> Query
     reify (k, v)
@@ -148,17 +128,17 @@ decode = List . map reify
                              in foldr f (Pair (last ks) $ Value v) $ init ks
         | otherwise    = Pair k $ Value v
 
-toQueryString :: (ByteString -> ByteString)  -- ^ URL Value Encoder
-     -> [(ByteString, ByteString)] -- ^ Key/Value Pairs
-     -> ByteString
-toQueryString f = BS.intercalate "&"
+encode :: (ByteString -> ByteString)  -- ^ URL Value Encoder
+       -> [(ByteString, ByteString)] -- ^ Key/Value Pairs
+       -> ByteString
+encode f = BS.intercalate "&"
     . map (\(k, v) -> mconcat [k, "=", f v])
     . sort
 
-fromQueryString :: (ByteString -> ByteString) -- ^ URL Value Decoder
-        -> ByteString                -- ^ Input Query String
-        -> [(ByteString, ByteString)]
-fromQueryString f = map (pair . BS.split '=')
+decode :: (ByteString -> ByteString) -- ^ URL Value Decoder
+       -> ByteString                -- ^ Input Query String
+       -> [(ByteString, ByteString)]
+decode f = map (pair . BS.split '=')
     . BS.split '&'
     . BS.dropWhile (\c -> c == '/' || c == '?')
   where
@@ -293,9 +273,6 @@ maybeRead :: Read a => String -> Maybe a
 maybeRead s = case reads s of
     [(x, "")] -> Just x
     _         -> Nothing
-
-parseQuery :: ByteString -> Query
-parseQuery _ = List []
 
 findPair :: ByteString -> Query -> Maybe Query
 findPair k qry
