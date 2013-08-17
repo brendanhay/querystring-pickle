@@ -2,28 +2,22 @@
 :set -XDeriveGeneric
 :set -XOverloadedStrings
 
-:load Network.HTTP.QueryString
-:load Network.HTTP.QueryString.Common
+:load Network.HTTP.QueryString.Pickle
 
-import System.IO
-import Network.HTTP.QueryString.Common
-import GHC.Generics
+import           Data.ByteString       (ByteString)
+import qualified Data.ByteString.Char8 as BS
+import           GHC.Generics
+import           System.IO
 
 hSetBuffering stdout LineBuffering
 
-data Qux = Corge | Grault | Waldo deriving (Show, Generic)
+data A = B | C deriving (Show, Generic)
 
-instance IsQuery Qux
+instance IsQuery A
 
-data Member = Member { fooInt :: Int } deriving (Show, Generic)
+data R = R { rA :: A } deriving (Show, Generic)
 
-instance IsQuery Member
+instance IsQuery R
 
-data Bar = Bar { barFoo :: Member, barQux :: Qux, barQaz :: [Member] } deriving (Show, Generic)
+let r = R C
 
-instance IsQuery Bar
-
-let f = Bar (Member 3) Corge [Member 1, Member 2]
-
-
--- toQueryString f

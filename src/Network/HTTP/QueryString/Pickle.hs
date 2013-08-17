@@ -1,14 +1,18 @@
-{-# LANGUAGE DefaultSignatures      #-}
-{-# LANGUAGE DeriveGeneric          #-}
-{-# LANGUAGE FlexibleContexts       #-}
-{-# LANGUAGE FlexibleInstances      #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE KindSignatures         #-}
-{-# LANGUAGE MultiParamTypeClasses  #-}
-{-# LANGUAGE OverlappingInstances   #-}
-{-# LANGUAGE OverloadedStrings      #-}
-{-# LANGUAGE ScopedTypeVariables    #-}
-{-# LANGUAGE TypeOperators          #-}
+{-# LANGUAGE DefaultSignatures               #-}
+{-# LANGUAGE DeriveGeneric                   #-}
+{-# LANGUAGE FlexibleContexts                #-}
+{-# LANGUAGE FlexibleInstances               #-}
+{-# LANGUAGE FunctionalDependencies          #-}
+{-# LANGUAGE KindSignatures                  #-}
+{-# LANGUAGE MultiParamTypeClasses           #-}
+{-# LANGUAGE OverlappingInstances            #-}
+{-# LANGUAGE OverloadedStrings               #-}
+{-# LANGUAGE ScopedTypeVariables             #-}
+{-# LANGUAGE TypeOperators                   #-}
+{-# LANGUAGE UndecidableInstances            #-}
+{-# LANGUAGE ViewPatterns                    #-}
+
+{-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 
 -- Module      : Network.HTTP.QueryString.Pickle
 -- Copyright   : (c) 2013 Brendan Hay <brendan.g.hay@gmail.com>
@@ -26,8 +30,8 @@ module Network.HTTP.QueryString.Pickle
       IsQuery (..)
 
     -- * Functions
-    , toQueryString
-    , fromQueryString
+    , toQuery
+    , fromQuery
     , encode
     , decode
 
@@ -48,7 +52,6 @@ module Network.HTTP.QueryString.Pickle
     , qpElem
     , qpPair
     , qpLift
-    , qpConst
     , qpPrim
     , qpOption
     , qpSum
@@ -59,6 +62,7 @@ module Network.HTTP.QueryString.Pickle
 import           Data.ByteString       (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import           Data.Char             (isLower, toLower)
+import           Data.Foldable         (foldl')
 import           Data.List             (sort)
 import           Data.Maybe
 import           Data.Monoid
@@ -81,8 +85,11 @@ data Query
       deriving (Eq, Show)
 
 instance Monoid Query where
-    mempty      = List []
-    mappend l r = List [l, r]
+    mempty                    = List []
+    mappend (List l) (List r) = List $ l ++ r
+    mappend (List l) r        = List $ r : l
+    mappend l        (List r) = List $ l : r
+    mappend l        r        = List [l, r]
 
 data PU a = PU
     { pickle   :: a -> Query
@@ -108,20 +115,22 @@ loweredOptions = defaultOptions
 -- Functions
 --
 
-toQueryString :: IsQuery a => a -> [(ByteString, ByteString)]
-toQueryString = enc "" . pickle queryPickler
+toQuery :: IsQuery a => a -> [(ByteString, ByteString)]
+toQuery = enc "" . pickle queryPickler
   where
     enc k (List qs) = concatMap (enc k) qs
-    enc k (Value v) = [(k, v)]
+    enc k (Value v)
+--        | BS.null k  = [(v, v)]
+        | otherwise  = [(k, v)]
     enc k (Pair k' q)
-        | BS.null k = enc k' q
-        | otherwise = enc (k <> "." <> k') q
+        | BS.null k  = enc k' q
+        | otherwise  = enc (k <> "." <> k') q
 
-fromQueryString :: IsQuery a => [(ByteString, ByteString)] -> Either String a
-fromQueryString = unpickle queryPickler . List . map reify
+fromQuery :: IsQuery a => [(ByteString, ByteString)] -> Either String a
+fromQuery = unpickle queryPickler . foldl' (\a b -> reify b <> a) mempty
   where
-    reify :: (ByteString, ByteString) -> Query
     reify (k, v)
+        | BS.null k       = Value v
         | '.' `BS.elem` k = let ks = BS.split '.' k
                                 f k' qry = Pair k' qry
                              -- foldr :: (a -> b -> b) -> b -> [a] -> b
@@ -143,6 +152,7 @@ decode f = map (pair . BS.split '=')
     . BS.dropWhile (\c -> c == '/' || c == '?')
   where
     pair (k:vs) = (k, f $ BS.intercalate "=" vs)
+    pair []     = ("", "")
 
 --
 -- Generics
@@ -155,36 +165,150 @@ class GIsQuery f where
     gQueryPickler :: Options -> PU a -> PU (f a)
 
 instance IsQuery a => GIsQuery (K1 i a) where
+    -- Constants
     gQueryPickler _ _ = (K1, unK1) `qpWrap` queryPickler
 
 instance GIsQuery U1 where
+    -- Empty Constructors Parameters
     gQueryPickler _ _ = (const U1, const ()) `qpWrap` qpLift ()
 
-instance (GIsQuery f, GIsQuery g) => GIsQuery (f :+: g) where
-    gQueryPickler opts f = gQueryPickler opts f `qpSum` gQueryPickler opts f
+instance GIsQuery a => GIsQuery (M1 i d a) where
+    -- Discard Metadata
+     gQueryPickler opts = qpWrap (M1, unM1) . gQueryPickler opts
 
-instance (GIsQuery f, GIsQuery g) => GIsQuery (f :*: g) where
-    gQueryPickler opts f = qpWrap
+instance CtorIsQuery a => GIsQuery (C1 c a) where
+    -- Constructor Encoding
+    gQueryPickler opts = qpWrap (M1, unM1) . ctorQueryPickler opts
+
+instance ( AllNullary  (a :+: b) allNullary
+         , NullIsQuery (a :+: b) allNullary
+         ) => GIsQuery  (a :+: b) where
+    -- Nullary Constructors
+    gQueryPickler opts =
+        (unTagged :: Tagged allNullary (PU ((a :+: b) d)) -> (PU ((a :+: b) d)))
+            . nullQueryPickler opts
+
+--
+-- Nullary
+--
+
+class NullIsQuery f allNullary where
+    nullQueryPickler :: Options -> PU a -> Tagged allNullary (PU (f a))
+
+instance SumIsQuery (a :+: b) => NullIsQuery (a :+: b) True where
+    nullQueryPickler opts _ = Tagged $ sumQueryPickler opts
+
+class SumIsQuery f where
+    sumQueryPickler :: Options -> PU (f a)
+
+instance (SumIsQuery a, SumIsQuery b) => SumIsQuery (a :+: b) where
+    sumQueryPickler opts = sumQueryPickler opts `qpSum` sumQueryPickler opts
+
+instance Constructor c => SumIsQuery (C1 c U1) where
+    sumQueryPickler opts = PU
+        { pickle   = const $ Value name
+        , unpickle = valueExists
+        }
+      where
+        name = BS.pack . constructorTagModifier opts $ conName (undefined :: t c U1 p)
+
+        valueExists qry
+            | (List [Value v]) <- qry, v == name = Right $ M1 U1
+            | (Value v)        <- qry, v == name = Right $ M1 U1
+            | otherwise = Left . BS.unpack $ "valueExists: failure - " <> name
+
+--
+-- Records
+--
+
+class CtorIsQuery f where
+    ctorQueryPickler :: Options -> PU a -> PU (f a)
+
+class CtorIsQuery' f isRecord where
+    ctorQueryPickler' :: Options -> PU a -> Tagged isRecord (PU (f a))
+
+instance (IsRecord f isRecord, CtorIsQuery' f isRecord) => CtorIsQuery f where
+    ctorQueryPickler opts = (unTagged :: Tagged isRecord (PU (f a)) -> PU (f a))
+        . ctorQueryPickler' opts
+
+instance RecIsQuery f => CtorIsQuery' f True where
+    ctorQueryPickler' opts = Tagged . recQueryPickler opts
+
+class RecIsQuery f where
+    recQueryPickler :: Options -> PU a -> PU (f a)
+
+instance (RecIsQuery a, RecIsQuery b) => RecIsQuery (a :*: b) where
+    recQueryPickler opts f = qpWrap
         (uncurry (:*:), \(a :*: b) -> (a, b))
-        (gQueryPickler opts f `qpPair` gQueryPickler opts f)
+        (recQueryPickler opts f `qpPair` recQueryPickler opts f)
 
-instance (Datatype d, GIsQuery f) => GIsQuery (D1 d f) where
-    gQueryPickler opts = qpWrap (M1, unM1) . gQueryPickler opts
-
-instance (Constructor c, GIsQuery f) => GIsQuery (C1 c f) where
-    gQueryPickler opts f = qpElem
-        (BS.pack . constructorTagModifier opts $ conName (undefined :: C1 c f r))
-        ((M1, unM1) `qpWrap` gQueryPickler opts f)
-
-instance (Selector s, GIsQuery f) => GIsQuery (S1 s f) where
-    gQueryPickler opts f = qpElem
+instance (Selector s, GIsQuery a) => RecIsQuery (S1 s a) where
+    recQueryPickler opts f = qpElem
         (BS.pack . fieldLabelModifier opts $ selName (undefined :: S1 s f r))
         ((M1, unM1) `qpWrap` gQueryPickler opts f)
 
-instance Constructor c => GIsQuery (C1 c U1) where
-    gQueryPickler opts = qpConst x . qpWrap (M1, unM1) . gQueryPickler opts
-     where
-       x = BS.pack $ conName (undefined :: t c U1 p)
+instance (Selector s, IsQuery a) => RecIsQuery (S1 s (K1 i (Maybe a))) where
+    recQueryPickler opts _ = (M1 . K1, unK1 . unM1) `qpWrap` pu
+      where
+        pu = PU
+            { pickle   = Pair name . p
+            , unpickle = \qry -> eitherToMaybe . (unpickle queryPickler =<<) . note qry $ findPair name qry
+            }
+
+        name = BS.pack . fieldLabelModifier opts $ selName (undefined :: t s (K1 i (Maybe a)) p)
+
+        p :: (Maybe a) -> Query
+        p (Just x) = pickle queryPickler x
+        p Nothing  = List []
+
+        eitherToMaybe :: Either String a => Either String (Maybe a)
+        eitherToMaybe (Left  _) = Right $ Nothing
+        eitherToMaybe (Right v) = Right $ Just v
+
+        note _  (Just x) = Right x
+        note qry Nothing = Left $
+            "qpElem: non-locatable - " ++ BS.unpack name ++ " - " ++ show qry
+
+        -- FIXME: The list match shouldn't recurse into the tree
+        findPair k qry
+            | List qs <- qry           = foldl' (<>) mempty $ map (findPair k) qs
+            | Pair k' q <- qry, k == k' = Just q
+            | otherwise               = Nothing
+
+--
+-- Tagging
+--
+
+class IsRecord (f :: * -> *) isRecord | f -> isRecord
+
+instance (IsRecord f isRecord) => IsRecord (f :*: g) isRecord
+instance IsRecord (M1 S NoSelector f) False
+instance (IsRecord f isRecord) => IsRecord (M1 S c f) isRecord
+instance IsRecord (K1 i c) True
+instance IsRecord U1 False
+
+class AllNullary (f :: * -> *) allNullary | f -> allNullary
+
+instance ( AllNullary a allNullaryL
+         , AllNullary b allNullaryR
+         , And allNullaryL allNullaryR allNullary
+         ) => AllNullary (a :+: b) allNullary
+instance AllNullary a allNullary => AllNullary (M1 i c a) allNullary
+instance AllNullary (a :*: b) False
+instance AllNullary (K1 i c) False
+instance AllNullary U1 True
+
+data True
+data False
+
+class And bool1 bool2 bool3 | bool1 bool2 -> bool3
+
+instance And True  True  True
+instance And False False False
+instance And False True  False
+instance And True  False False
+
+newtype Tagged s b = Tagged { unTagged :: b }
 
 --
 -- Combinators
@@ -199,25 +323,29 @@ qpWrap (f, g) pua = PU
 qpElem :: ByteString -> PU a -> PU a
 qpElem name pu = PU
     { pickle   = Pair name . pickle pu
-    , unpickle = (unpickle pu =<<) . annotate . findPair name
+    , unpickle = \qry -> (unpickle pu =<<) . note qry $ findPair name qry
     }
   where
+    note _  (Just x) = Right x
+    note qry Nothing = Left $
+        "qpElem: non-locatable - " ++ BS.unpack name ++ " - " ++ show qry
+
+    -- FIXME: The list match shouldn't recurse into the tree
     findPair k qry
-        | List qs <- qry           = listToMaybe . catMaybes $ map (findPair k) qs
+        | List qs <- qry           = foldl' (<>) mempty $ map (findPair k) qs
         | Pair k' q <- qry, k == k' = Just q
         | otherwise               = Nothing
-
-    annotate = note ("qpElem: non-locatable - " <> BS.unpack name)
 
 qpPair :: PU a -> PU b -> PU (a, b)
 qpPair pua pub = PU
     { pickle   = \(a, b) -> pickle pua a <> pickle pub b
     , unpickle = \qry -> case (unpickle pua qry, unpickle pub qry) of
           (Right a, Right b) -> Right (a, b)
-          (Left ea, Right _) -> Left $ "qpPair: left - " ++ ea
-          (Right _, Left eb) -> Left $ "qpPair: right - " ++ eb
-          (Left ea, Left eb) -> Left $ "qpPair: both - " ++ show (ea, eb)
+          (Left ea, _)       -> failure qry $ "left - " ++ ea
+          (_, Left eb)       -> failure qry $ "right - " ++ eb
     }
+  where
+    failure qry s = Left ("qpPair: " ++ s ++ ", qry: " ++ show qry)
 
 qpLift :: a -> PU a
 qpLift x = PU
@@ -225,20 +353,20 @@ qpLift x = PU
     , unpickle = const $ Right x
     }
 
-qpConst :: ByteString -> PU a -> PU a
-qpConst name pu = PU
-    { pickle   = const $ Value name
-    , unpickle = const . unpickle pu $ Value name
-    }
-
 qpPrim :: (Read a, Show a) => PU a
 qpPrim = PU
     { pickle   = Value . BS.pack . show
-    , unpickle = \qry -> case qry of
-          (Value x) -> let v = BS.unpack x
-                      in note ("qpPrim: failed reading - " ++ v) $ maybeRead v
-          _         -> Left $ "qpPrim: unexpected non-value - " ++ show qry
+    , unpickle = (eitherRead =<<) . findValue
     }
+  where
+    eitherRead (BS.unpack -> s) = case reads s of
+        [(x, "")] -> Right x
+        _         -> Left $ "qpPrim: failed to read value - " ++ s
+
+    findValue qry
+        | List [Value v] <- qry = Right v
+        | (Value v)      <- qry = Right v
+        | otherwise = Left $ "qpPrim: unexpected non-value - " ++ show qry
 
 qpOption :: PU a -> PU (Maybe a)
 qpOption pu = PU
@@ -281,20 +409,12 @@ qpOrdinalList = PU
       where
         k' = BS.pack $ show n
 
-maybeRead :: Read a => String -> Maybe a
-maybeRead s = case reads s of
-    [(x, "")] -> Just x
-    _         -> Nothing
-
-note :: a -> Maybe b -> Either a b
-note a = maybe (Left a) Right
-
 --
 -- Instances
 --
 
-instance IsQuery a => IsQuery (Maybe a) where
-    queryPickler = qpOption queryPickler
+-- instance IsQuery a => IsQuery (Maybe a) where
+--     queryPickler = qpOption queryPickler
 
 instance (IsQuery a, IsQuery b) => IsQuery (Either a b) where
     queryPickler = qpEither queryPickler queryPickler

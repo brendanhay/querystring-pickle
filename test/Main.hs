@@ -3,7 +3,6 @@
 {-# OPTIONS_GHC -fno-warn-unused-binds #-}
 {-# OPTIONS_GHC -fno-warn-orphans      #-}
 
--- |
 -- Module      : Main
 -- Copyright   : (c) 2013 Brendan Hay <brendan.g.hay@gmail.com>
 -- License     : This Source Code Form is subject to the terms of
@@ -75,14 +74,12 @@ instance Arbitrary Qux where
 
 data Baz = Baz
     { bazFoo :: Maybe Foo
-    , barBar :: Maybe Bar
-    , barQux :: Maybe Qux
     } deriving (Eq, Show, Generic)
 
 instance IsQuery Baz
 
 instance Arbitrary Baz where
-    arbitrary = Baz <$> arbitrary <*> arbitrary <*> arbitrary
+    arbitrary = Baz <$> arbitrary
 
 data Garply = Garply
     { graplyByteString :: ByteString
@@ -97,22 +94,13 @@ instance Arbitrary Garply where
 data Waldo = Waldo
     { waldoEither     :: Either Baz Qux
     , waldoMaybe      :: Maybe Foo
-    , waldoNested     :: Baz
-    , waldoInteger    :: Integer
-    , waldoByteString :: ByteString
     , waldoUnit       :: ()
     } deriving (Eq, Show, Generic)
 
 instance IsQuery Waldo
 
 instance Arbitrary Waldo where
-    arbitrary = Waldo
-        <$> arbitrary
-        <*> arbitrary
-        <*> arbitrary
-        <*> arbitrary
-        <*> arbitrary
-        <*> arbitrary
+    arbitrary = Waldo <$> arbitrary <*> arbitrary <*> arbitrary
 
 data Fred = PrefixXyzzy | PrefixThud
     deriving (Eq, Show, Generic)
