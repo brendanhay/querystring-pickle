@@ -64,7 +64,6 @@ import qualified Data.ByteString.Char8 as BS
 import           Data.Char             (isLower, toLower)
 import           Data.Foldable         (foldl')
 import           Data.List             (sort)
-import           Data.Maybe
 import           Data.Monoid
 import           GHC.Generics
 
@@ -248,32 +247,12 @@ instance (Selector s, GIsQuery a) => RecIsQuery (S1 s a) where
         ((M1, unM1) `qpWrap` gQueryPickler opts f)
 
 instance (Selector s, IsQuery a) => RecIsQuery (S1 s (K1 i (Maybe a))) where
-    recQueryPickler opts _ = (M1 . K1, unK1 . unM1) `qpWrap` pu
+    recQueryPickler opts _ =
+        (M1 . K1, unK1 . unM1) `qpWrap` qpOption (qpElem name queryPickler)
       where
-        pu = PU
-            { pickle   = Pair name . p
-            , unpickle = \qry -> eitherToMaybe . (unpickle queryPickler =<<) . note qry $ findPair name qry
-            }
-
-        name = BS.pack . fieldLabelModifier opts $ selName (undefined :: t s (K1 i (Maybe a)) p)
-
-        p :: (Maybe a) -> Query
-        p (Just x) = pickle queryPickler x
-        p Nothing  = List []
-
-        eitherToMaybe :: Either String a => Either String (Maybe a)
-        eitherToMaybe (Left  _) = Right $ Nothing
-        eitherToMaybe (Right v) = Right $ Just v
-
-        note _  (Just x) = Right x
-        note qry Nothing = Left $
-            "qpElem: non-locatable - " ++ BS.unpack name ++ " - " ++ show qry
-
-        -- FIXME: The list match shouldn't recurse into the tree
-        findPair k qry
-            | List qs <- qry           = foldl' (<>) mempty $ map (findPair k) qs
-            | Pair k' q <- qry, k == k' = Just q
-            | otherwise               = Nothing
+        name = BS.pack
+            . fieldLabelModifier opts
+            $ selName (undefined :: t s (K1 i (Maybe a)) p)
 
 --
 -- Tagging
@@ -370,9 +349,12 @@ qpPrim = PU
 
 qpOption :: PU a -> PU (Maybe a)
 qpOption pu = PU
-    { pickle   = maybe (List []) $ pickle pu
-    , unpickle = fmap Just . unpickle pu
+    { pickle   = maybe (List []) (pickle pu)
+    , unpickle = eitherToMaybe . unpickle pu
     }
+  where
+    eitherToMaybe (Left  _) = Right $ Nothing
+    eitherToMaybe (Right v) = Right $ Just v
 
 qpSum :: PU (f r) -> PU (g r) -> PU ((f :+: g) r)
 qpSum left right = (inp, out) `qpWrap` qpEither left right
@@ -412,9 +394,6 @@ qpOrdinalList = PU
 --
 -- Instances
 --
-
--- instance IsQuery a => IsQuery (Maybe a) where
---     queryPickler = qpOption queryPickler
 
 instance (IsQuery a, IsQuery b) => IsQuery (Either a b) where
     queryPickler = qpEither queryPickler queryPickler

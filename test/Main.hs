@@ -94,13 +94,12 @@ instance Arbitrary Garply where
 data Waldo = Waldo
     { waldoEither     :: Either Baz Qux
     , waldoMaybe      :: Maybe Foo
-    , waldoUnit       :: ()
     } deriving (Eq, Show, Generic)
 
 instance IsQuery Waldo
 
 instance Arbitrary Waldo where
-    arbitrary = Waldo <$> arbitrary <*> arbitrary <*> arbitrary
+    arbitrary = Waldo <$> arbitrary <*> arbitrary
 
 data Fred = PrefixXyzzy | PrefixThud
     deriving (Eq, Show, Generic)
