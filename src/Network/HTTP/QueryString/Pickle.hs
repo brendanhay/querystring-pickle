@@ -319,7 +319,7 @@ qpPair pua pub = PU
     , unpickle = \qry -> case (unpickle pua qry, unpickle pub qry) of
           (Right a, Right b) -> Right (a, b)
           (Left ea, _)       -> failure qry $ "left - " ++ ea
-          (_, Left eb)       -> failure qry $ "right - " ++ eb
+          (_,       Left eb) -> failure qry $ "right - " ++ eb
     }
   where
     failure qry s = Left ("qpPair: " ++ s ++ ", qry: " ++ show qry)
@@ -348,11 +348,8 @@ qpPrim = PU
 qpOption :: PU a -> PU (Maybe a)
 qpOption pu = PU
     { pickle   = maybe (List []) (pickle pu)
-    , unpickle = eitherToMaybe . unpickle pu
+    , unpickle = either (const $ Right Nothing) (Right . Just) . unpickle pu
     }
-  where
-    eitherToMaybe (Left  _) = Right $ Nothing
-    eitherToMaybe (Right v) = Right $ Just v
 
 qpSum :: PU (f r) -> PU (g r) -> PU ((f :+: g) r)
 qpSum left right = (inp, out) `qpWrap` qpEither left right
