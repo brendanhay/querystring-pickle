@@ -118,12 +118,10 @@ toQuery :: IsQuery a => a -> [(ByteString, ByteString)]
 toQuery = enc "" . pickle queryPickler
   where
     enc k (List qs) = concatMap (enc k) qs
-    enc k (Value v)
---        | BS.null k  = [(v, v)]
-        | otherwise  = [(k, v)]
+    enc k (Value v) = [(k, v)]
     enc k (Pair k' q)
-        | BS.null k  = enc k' q
-        | otherwise  = enc (k <> "." <> k') q
+        | BS.null k = enc k' q
+        | otherwise = enc (k <> "." <> k') q
 
 fromQuery :: IsQuery a => [(ByteString, ByteString)] -> Either String a
 fromQuery = unpickle queryPickler . foldl' (\a b -> reify b <> a) mempty

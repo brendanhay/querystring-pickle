@@ -33,7 +33,7 @@ library
         -O2
 
     build-depends:
-        base       > 4 && < 5
+        base       >= 4.6 && < 5
       , bytestring
 
 test-suite querystring-pickle-tests
@@ -50,6 +50,6 @@ test-suite querystring-pickle-tests
         test-framework             >= 0.8
       , test-framework-quickcheck2 >= 0.3
       , QuickCheck                 >= 2.5
-      , base                       >  4 && < 5
+      , base                       >= 4.6 && < 5
       , bytestring
       , querystring-pickle
