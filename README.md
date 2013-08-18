@@ -25,40 +25,57 @@
 
 ## Caveats
 
-An `IsQuery` instance for `Maybe a` is supplied and it is left
-up to the consumer of the library to implement them. (Apologies for forcing
-orphan-instances on anybody.)
-
-The reasoning is the desired behaviour of the de/serialisers for both types is
-ambiguous, take the following naive instance declarations:
+`IsQuery` instances for `Maybe a` and `Either a b` are not supplied due to
+ambiguous semantics, take the following example:
 
 ```haskell
 instance IsQuery a => IsQuery (Maybe a) where
     queryPickler = qpOption queryPickler
 
-data A = A { aInt :: Int } deriving (Show, Generic)
+instance (IsQuery a, IsQuery b) => IsQuery (Either a b) where
+    queryPickler = queryPickler `qpEither` queryPickler
+
+data A = A { aInt1 :: Int, aInt2 :: Int } deriving (Show, Generic)
 data B = B { bA :: Maybe A } deriving (Show, Generic)
 data C = C { cB :: B } deriving (Show, Generic)
+data D = D { dAInt :: Either A Int } deriving (Show, Generic)
 
 instance IsQuery A
 instance IsQuery B
 instance IsQuery C
+instance IsQuery D
 
-let b = C $ B Nothing
+let c = C $ B Nothing
+let d = D . Left $ A 1 2
+let e = D $ Right 3
 ```
 
-Running `toQuery` / `fromQuery` on the example yields:
+Running `toQuery` / `fromQuery` on the example bindings yields:
 
 ```haskell
-ghci: let bQry = toQuery b
+
+λ: toQuery c
 []
 
-ghci: fromQuery bQry :: Either String C
+λ: fromQuery (toQuery c) :: Either String C
 Left "qpElem: non-locatable - B - List []"
+
+λ: toQuery d
+[("AInt.Int1","1"),("AInt.Int2","2")]
+
+λ: fromQuery (toQuery d) :: Either String D
+Right (D {dAInt = Left (A {aInt1 = 1, aInt2 = 2})})
+
+λ: toQuery e
+[("AInt","3")]
+
+λ: fromQuery (toQuery e) :: Either String D
+Right (D {dAInt = Right 3})
+
 ```
 
-If data type `B` has a second non-optional field, the
-de/serialisation will succeed.
+If data type `B` has a second non-optional field, the `fromQuery` deserialisation
+of binding `c` will succeed.
 
 This is due to the overly simple underlying rose tree used
 as the intermediate data structure for query transforms.
