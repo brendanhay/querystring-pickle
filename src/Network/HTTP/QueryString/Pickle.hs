@@ -86,6 +86,17 @@ data Query
     | Value ByteString
       deriving (Eq, Show)
 
+instance Ord Query where
+  compare (List  ls)  (List  rs)  = ls `compare` rs
+  compare (Pair k1 _) (Pair k2 _) = k1 `compare` k2
+  compare (Value v1)  (Value v2)  = v1 `compare` v2
+
+  compare (List _)   (Pair _ _) = GT
+  compare (List _)   (Value _)  = GT
+  compare (Pair _ _) (Value _)  = GT
+
+  compare _ _ = LT
+
 instance Monoid Query where
     mempty                    = List []
     mappend (List l) (List r) = List $ l ++ r
@@ -384,8 +395,8 @@ qpOrdinalList :: PU a -> PU [a]
 qpOrdinalList pu = PU
     { pickle   = List . zipWith pickler ([1..] :: [Integer])
     , unpickle = \qry -> case qry of
-          (List qs) -> concatEithers $ map (unpickle pu) qs
-          _         -> Left "failure"
+          (List qs) -> concatEithers $ map (unpickle pu) [v | Pair _ v <- sort qs]
+          _         -> Left $ "qpOrdinalList: unexpected non-list - " ++ show qry
     }
   where
     pickler (BS.pack . show -> k) x =
@@ -399,14 +410,14 @@ qpList pu = PU
     , unpickle = \qry -> case qry of
           v@(Value _) -> fmap (:[]) $ unpickle pu v
           (List [])   -> Right []
-          (List qs)   -> concatEithers $ map (unpickle pu) qs
+          (List qs)   -> fmap reverse . concatEithers $ map (unpickle pu) qs
           _           -> Left $ "qpList: unexpected non-list - " ++ show qry
     }
 
 concatEithers :: [Either b c] -> Either b [c]
 concatEithers xs = case partitionEithers xs of
     (l:_, _) -> Left l
-    ([], rs) -> Right $ reverse rs
+    ([], rs) -> Right rs
 
 --
 -- Instances

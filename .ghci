@@ -30,7 +30,7 @@ let d = D . Left $ A 1 2
 let e = D $ Right 3
 
 
-instance IsQuery a => IsQuery [a] where queryPickler = qpList queryPickler
+instance IsQuery a => IsQuery [a] where queryPickler = qpOrdinalList queryPickler
 
 data E = E { eInts :: [Int] } deriving (Show, Generic)
 

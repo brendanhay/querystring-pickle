@@ -49,7 +49,7 @@ instance (IsQuery a, IsQuery b) => IsQuery (Either a b) where
     queryPickler = queryPickler `qpEither` queryPickler
 
 instance IsQuery a => IsQuery [a] where
-    queryPickler = qpDefault [] $ qpList queryPickler
+    queryPickler = qpList queryPickler
 
 data Foo = Foo
     { fooInt        :: Int

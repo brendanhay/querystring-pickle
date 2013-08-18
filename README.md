@@ -35,25 +35,24 @@ are supplied:
 
 #### qpList
 
-?cars=Saab,Audi
+A query string of the format `?key=Saab,Audi,Holden` can be derived using `qpList` as follows:
 
--- ?cars[]=Saab&cars[]=Audi
--- ?cars=Saab&cars=Audi - ?
+```haskell
+instance IsQuery a => IsQuery [a] where
+    queryPickler = qpList queryPickler
+```
 
 #### qpOrdinalList
 
-?cars.1=Saab&cars.2=Audi
-
+Alternatively, a query string of the format `key.1=Saab&key.2=Audi&key.3=Holden` can
+be derived using the `qpOrdinalList` combinator:
 
 ```haskell
-
+instance IsQuery a => IsQuery [a] where
+    queryPickler = qpOrdinalList queryPickler
 ```
 
-```
-```
-
-> TODO
-
+> Ordering is preserved in both cases, although `qpOrdinalList` would preserve the order if the querystring was reshuffled.
 
 ### Either/Maybe
 
