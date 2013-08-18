@@ -9,7 +9,7 @@
 * [Examples](#examples)
 * [Common Instances](#common-instances)
   - [Lists](#lists)
-  - [Either/Maybe](#either-maybe)
+  - [Either/Maybe](#eithermaybe)
 * [Compatibility](#compatibility)
 * [Contributing](#contributing)
 * [Licence](#licence)
@@ -28,6 +28,29 @@
 ## Common Instances
 
 ### Lists
+
+No default instance for `IsQuery a => IsQuery [a]` is specified since there
+are a number of possible implementations. To that end, two pickling combinators
+are supplied:
+
+#### qpList
+
+?cars=Saab,Audi
+
+-- ?cars[]=Saab&cars[]=Audi
+-- ?cars=Saab&cars=Audi - ?
+
+#### qpOrdinalList
+
+?cars.1=Saab&cars.2=Audi
+
+
+```haskell
+
+```
+
+```
+```
 
 > TODO
 

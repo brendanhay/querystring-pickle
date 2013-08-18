@@ -34,6 +34,7 @@ main = defaultMain
         , testProperty "Nullary" (query :: Iso Qux)
         , testProperty "Maybe"   (query :: Iso Baz)
         , testProperty "Complex" (query :: Iso Waldo)
+        , testProperty "List"    (query :: Iso Wibble)
         ]
     , testGroup "Generic Option Modifiers"
         [ testProperty "Constructors" (query :: Iso Fred)
@@ -46,6 +47,9 @@ instance IsQuery a => IsQuery (Maybe a) where
 
 instance (IsQuery a, IsQuery b) => IsQuery (Either a b) where
     queryPickler = queryPickler `qpEither` queryPickler
+
+instance IsQuery a => IsQuery [a] where
+    queryPickler = qpDefault [] $ qpList queryPickler
 
 data Foo = Foo
     { fooInt        :: Int
@@ -98,6 +102,15 @@ instance Arbitrary Waldo where
     arbitrary = Waldo
         <$> arbitrary
         <*> arbitrary
+
+data Wibble = Wibble
+    { wibList :: [Int]
+    } deriving (Eq, Show, Generic)
+
+instance IsQuery Wibble
+
+instance Arbitrary Wibble where
+    arbitrary = Wibble <$> arbitrary
 
 data Fred = PrefixXyzzy | PrefixThud
     deriving (Eq, Show, Generic)

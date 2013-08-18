@@ -11,6 +11,10 @@ import           System.IO
 
 hSetBuffering stdout LineBuffering
 
+instance IsQuery a => IsQuery (Maybe a) where queryPickler = qpOption queryPickler
+
+instance (IsQuery a, IsQuery b) => IsQuery (Either a b) where queryPickler = queryPickler `qpEither` queryPickler
+
 data A = A { aInt1 :: Int, aInt2 :: Int } deriving (Show, Generic)
 data B = B { bA :: Maybe A } deriving (Show, Generic)
 data C = C { cB :: B } deriving (Show, Generic)
@@ -25,3 +29,9 @@ let c = C $ B Nothing
 let d = D . Left $ A 1 2
 let e = D $ Right 3
 
+
+instance IsQuery a => IsQuery [a] where queryPickler = qpList queryPickler
+
+data E = E { eInts :: [Int] } deriving (Show, Generic)
+
+instance IsQuery E

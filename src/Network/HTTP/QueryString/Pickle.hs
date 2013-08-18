@@ -54,14 +54,17 @@ module Network.HTTP.QueryString.Pickle
     , qpLift
     , qpPrim
     , qpOption
+    , qpDefault
     , qpSum
     , qpEither
     , qpOrdinalList
+    , qpList
     ) where
 
 import           Data.ByteString       (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import           Data.Char             (isLower, toLower)
+import           Data.Either
 import           Data.Foldable         (foldl')
 import           Data.List             (sort)
 import           Data.Monoid
@@ -303,14 +306,12 @@ qpElem name pu = PU
     , unpickle = \qry -> (unpickle pu =<<) . note qry $ findPair name qry
     }
   where
-    note _  (Just x) = Right x
-    note qry Nothing = Left $
-        "qpElem: non-locatable - " ++ BS.unpack name ++ " - " ++ show qry
+    note _ = maybe (Right $ List []) Right
 
     findPair k qry
-        | List qs <- qry           = foldl' (<>) mempty $ map (findPair k) qs
+        | List qs <- qry            = mconcat $ map (findPair k) qs
         | Pair k' q <- qry, k == k' = Just q
-        | otherwise               = Nothing
+        | otherwise                 = Nothing
 
 qpPair :: PU a -> PU b -> PU (a, b)
 qpPair pua pub = PU
@@ -350,6 +351,12 @@ qpOption pu = PU
     , unpickle = either (const $ Right Nothing) (Right . Just) . unpickle pu
     }
 
+qpDefault :: a -> PU a -> PU a
+qpDefault x pu = PU
+    { pickle    = pickle pu
+    , unpickle  = either (const $ Right x) Right . unpickle pu
+    }
+
 qpSum :: PU (f r) -> PU (g r) -> PU ((f :+: g) r)
 qpSum left right = (inp, out) `qpWrap` qpEither left right
   where
@@ -373,17 +380,33 @@ qpEither pua pub = PU pickleEither unpickleEither
     pickleEither (Left  x) = pickle pua x
     pickleEither (Right y) = pickle pub y
 
-qpOrdinalList :: IsQuery a => PU [a]
-qpOrdinalList = PU
-    { pickle = List . zipWith pick ([1..] :: [Integer])
-    , unpickle = undefined
+qpOrdinalList :: PU a -> PU [a]
+qpOrdinalList pu = PU
+    { pickle   = List . zipWith pickler ([1..] :: [Integer])
+    , unpickle = \qry -> case qry of
+          (List qs) -> concatEithers $ map (unpickle pu) qs
+          _         -> Left "failure"
     }
   where
-    pick n x = case pickle queryPickler x of
-        (Pair k v) -> Pair k (Pair k' v)
-        other      -> (Pair k' other)
-      where
-        k' = BS.pack $ show n
+    pickler (BS.pack . show -> k) x =
+        case pickle pu x of
+            (Pair k' v) -> Pair k' (Pair k v)
+            qry         -> (Pair k qry)
+
+qpList :: PU a -> PU [a]
+qpList pu = PU
+    { pickle   = mconcat . map (pickle pu)
+    , unpickle = \qry -> case qry of
+          v@(Value _) -> fmap (:[]) $ unpickle pu v
+          (List [])   -> Right []
+          (List qs)   -> concatEithers $ map (unpickle pu) qs
+          _           -> Left $ "qpList: unexpected non-list - " ++ show qry
+    }
+
+concatEithers :: [Either b c] -> Either b [c]
+concatEithers xs = case partitionEithers xs of
+    (l:_, _) -> Left l
+    ([], rs) -> Right $ reverse rs
 
 --
 -- Instances
