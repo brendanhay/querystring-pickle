@@ -74,12 +74,41 @@ import           GHC.Generics
 -- Types
 --
 
+-- | A type that has a pairing of pickler + unpickler.
+--
+-- Using the @DeriveGeneric@ language extension, this class specifies a
+-- default generic implementation using 'genericQueryPickler'.
+--
+-- For example:
+--
+-- @{-\# LANGUAGE DeriveGeneric \#-}
+--
+-- import GHC.Generics
+--
+-- data Foo { fooIntX :: Int, fooIntY :: Int } deriving (Generic)
+--
+-- instance IsQuery Foo
+-- @
+--
+-- Note that you can parameterise some of the options to 'genericQueryPickler'
+-- by specifying an implementation instead of using @DefaultSignatures@.
+--
+-- The previous example:
+--
+-- @
+-- instance IsQuery Foo where
+--     queryPickler = 'genericQueryPickler' 'defaultOptions'
+-- @
+--
+-- More examples of creating 'queryPickler' implementations can be found in the
+-- @README@ or in the @tests@.
 class IsQuery a where
     queryPickler :: PU a
 
     default queryPickler :: (Generic a, GIsQuery (Rep a)) => PU a
     queryPickler = genericQueryPickler defaultOptions
 
+-- | Internal tree representation for queries.
 data Query
     = List [Query]
     | Pair ByteString Query
@@ -104,11 +133,32 @@ instance Monoid Query where
     mappend l        (List r) = List $ l : r
     mappend l        r        = List [l, r]
 
+-- | Pairing of pickler to unpickler.
 data PU a = PU
     { pickle   :: a -> Query
     , unpickle :: Query -> Either String a
     }
 
+-- | Options for 'genericQueryPickler' to parameterise how constructor and record
+-- field labels are un/pickled.
+--
+-- For example:
+--
+-- @import GHC.Generics
+--
+-- data Bar { barThisIsAByteString :: ByteString } deriving (Generic)
+--
+-- instance IsQuery Foo where
+--     queryPickler = 'genericQueryPickler' $ Options
+--         { constructorTagModifier = id
+--         , fieldLabelModifier     = dropWhile isLower
+--         }
+-- @
+--
+-- Would remove @bar@ from the record field @barThisIsAByteString@ so the resulting
+-- pair for that field in the association list would be @(ThisIsAByteString, n :: Int)@.
+--
+-- The above example is how 'defaultOptions' behaves.
 data Options = Options
     { constructorTagModifier :: String -> String
       -- ^ Function applied to constructor tags.
@@ -116,9 +166,12 @@ data Options = Options
       -- ^ Function applied to record field labels.
     }
 
+-- | Strips lowercase prefixes from record fields.
 defaultOptions :: Options
 defaultOptions = Options id (dropWhile isLower)
 
+-- | Strips lowercase prefixes from record fields and subsequently lowercases
+-- the remaining identifier.
 loweredOptions :: Options
 loweredOptions = defaultOptions
     { fieldLabelModifier = map toLower . dropWhile isLower
@@ -128,6 +181,7 @@ loweredOptions = defaultOptions
 -- Functions
 --
 
+-- | Pickle a data type with an 'IsQuery' instance to an association list.
 toQuery :: IsQuery a => a -> [(ByteString, ByteString)]
 toQuery = enc "" . pickle queryPickler
   where
@@ -137,26 +191,27 @@ toQuery = enc "" . pickle queryPickler
         | BS.null k = enc k' q
         | otherwise = enc (k <> "." <> k') q
 
+-- | Unpickle an association list to an 'IsQuery' type, returning an error
+-- message when unpickling fails.
 fromQuery :: IsQuery a => [(ByteString, ByteString)] -> Either String a
 fromQuery = unpickle queryPickler . foldl' (\a b -> reify b <> a) mempty
   where
     reify (k, v)
         | BS.null k       = Value v
-        | '.' `BS.elem` k = let ks = BS.split '.' k
-                                f k' qry = Pair k' qry
-                             -- foldr :: (a -> b -> b) -> b -> [a] -> b
+        | '.' `BS.elem` k = let ks     = BS.split '.' k
+                                f k' q = Pair k' q
                              in foldr f (Pair (last ks) $ Value v) $ init ks
-        | otherwise    = Pair k $ Value v
+        | otherwise       = Pair k $ Value v
 
-encode :: (ByteString -> ByteString)  -- ^ URL Value Encoder
+-- | Helper to encode an association list as a single canonical query string.
+encode :: (ByteString -> ByteString) -- ^ URL Value Encoder
        -> [(ByteString, ByteString)] -- ^ Key/Value Pairs
        -> ByteString
-encode f = BS.intercalate "&"
-    . map (\(k, v) -> mconcat [k, "=", f v])
-    . sort
+encode f = BS.intercalate "&" . map (\(k, v) -> mconcat [k, "=", f v]) . sort
 
+-- | Helper to decode a query string to an association list.
 decode :: (ByteString -> ByteString) -- ^ URL Value Decoder
-       -> ByteString                -- ^ Input Query String
+       -> ByteString                 -- ^ Input Query String
        -> [(ByteString, ByteString)]
 decode f = map (pair . BS.split '=')
     . BS.split '&'
