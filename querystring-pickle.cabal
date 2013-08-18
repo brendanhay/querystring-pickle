@@ -1,6 +1,6 @@
 name:                  querystring-pickle
 version:               0.1.0
-synopsis:              Type classes, pickling combinators, and GHC.Generics implementations for Query Strings
+synopsis:              Picklers for de/serialising Generic data types to and from query strings
 license:               OtherLicense
 license-file:          LICENSE
 author:                Brendan Hay
