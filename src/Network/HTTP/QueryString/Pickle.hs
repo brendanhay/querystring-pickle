@@ -27,7 +27,7 @@
 module Network.HTTP.QueryString.Pickle
     (
     -- * Class
-      IsQuery (..)
+      IsQuery             (..)
 
     -- * Functions
     , toQuery
@@ -36,8 +36,8 @@ module Network.HTTP.QueryString.Pickle
     , decodeQuery
 
     -- * Data Types
-    , Query (..)
-    , PU (..)
+    , Query               (..)
+    , PU                  (..)
 
     -- * Options
     , GenericQueryOptions (..)
