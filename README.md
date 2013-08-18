@@ -8,6 +8,7 @@
 * [Introduction](#introduction)
 * [Examples](#examples)
 * [Common Instances](#common-instances)
+  - [Lists](#lists)
   - [Either/Maybe](#either-maybe)
 * [Compatibility](#compatibility)
 * [Contributing](#contributing)
