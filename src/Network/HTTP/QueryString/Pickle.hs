@@ -32,17 +32,17 @@ module Network.HTTP.QueryString.Pickle
     -- * Functions
     , toQuery
     , fromQuery
-    , encode
-    , decode
+    , encodeQuery
+    , decodeQuery
 
     -- * Data Types
     , Query (..)
     , PU (..)
 
     -- * Options
-    , Options (..)
-    , defaultOptions
-    , loweredOptions
+    , GenericQueryOptions (..)
+    , defaultQueryOptions
+    , loweredQueryOptions
 
     -- * Generics
     , genericQueryPickler
@@ -106,7 +106,7 @@ class IsQuery a where
     queryPickler :: PU a
 
     default queryPickler :: (Generic a, GIsQuery (Rep a)) => PU a
-    queryPickler = genericQueryPickler defaultOptions
+    queryPickler = genericQueryPickler defaultQueryOptions
 
 -- | Internal tree representation for queries.
 data Query
@@ -159,21 +159,23 @@ data PU a = PU
 -- pair for that field in the association list would be @(ThisIsAByteString, n :: Int)@.
 --
 -- The above example is how 'defaultOptions' behaves.
-data Options = Options
+data GenericQueryOptions = GenericQueryOptions
     { constructorTagModifier :: String -> String
       -- ^ Function applied to constructor tags.
     , fieldLabelModifier     :: String -> String
       -- ^ Function applied to record field labels.
     }
 
+type Options = GenericQueryOptions
+
 -- | Strips lowercase prefixes from record fields.
-defaultOptions :: Options
-defaultOptions = Options id (dropWhile isLower)
+defaultQueryOptions :: Options
+defaultQueryOptions = GenericQueryOptions id (dropWhile isLower)
 
 -- | Strips lowercase prefixes from record fields and subsequently lowercases
 -- the remaining identifier.
-loweredOptions :: Options
-loweredOptions = defaultOptions
+loweredQueryOptions :: Options
+loweredQueryOptions = defaultQueryOptions
     { fieldLabelModifier = map toLower . dropWhile isLower
     }
 
@@ -204,16 +206,16 @@ fromQuery = unpickle queryPickler . foldl' (\a b -> reify b <> a) mempty
         | otherwise       = Pair k $ Value v
 
 -- | Helper to encode an association list as a single canonical query string.
-encode :: (ByteString -> ByteString) -- ^ URL Value Encoder
-       -> [(ByteString, ByteString)] -- ^ Key/Value Pairs
-       -> ByteString
-encode f = BS.intercalate "&" . map (\(k, v) -> mconcat [k, "=", f v]) . sort
+encodeQuery :: (ByteString -> ByteString) -- ^ URL Value Encoder
+            -> [(ByteString, ByteString)] -- ^ Key/Value Pairs
+            -> ByteString
+encodeQuery f = BS.intercalate "&" . map (\(k, v) -> mconcat [k, "=", f v]) . sort
 
 -- | Helper to decode a query string to an association list.
-decode :: (ByteString -> ByteString) -- ^ URL Value Decoder
-       -> ByteString                 -- ^ Input Query String
-       -> [(ByteString, ByteString)]
-decode f = map (pair . BS.split '=')
+decodeQuery :: (ByteString -> ByteString) -- ^ URL Value Decoder
+            -> ByteString                 -- ^ Input Query String
+            -> [(ByteString, ByteString)]
+decodeQuery f = map (pair . BS.split '=')
     . BS.split '&'
     . BS.dropWhile (\c -> c == '/' || c == '?')
   where
