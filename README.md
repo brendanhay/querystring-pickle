@@ -52,7 +52,7 @@ instance IsQuery a => IsQuery [a] where
     queryPickler = qpOrdinalList queryPickler
 ```
 
-> Ordering is preserved in both cases, although `qpOrdinalList` would preserve the order if the querystring was reshuffled.
+Ordering is preserved in both cases, although `qpOrdinalList` would preserve the order if the querystring was reshuffled.
 
 ### Either/Maybe
 
@@ -113,7 +113,7 @@ as the intermediate data structure for query transforms.
 Something that will hopefully be fixed in a future release.
 
 It is left up to the consumer of the library to decide best how to handle this
-case. I apologies if it forces anyone to use orhaned instances.
+case. I apologies if it forces anyone to use orphaned instances.
 
 
 ## Compatibility
