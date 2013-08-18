@@ -116,8 +116,8 @@ data Fred = PrefixXyzzy | PrefixThud
     deriving (Eq, Show, Generic)
 
 instance IsQuery Fred where
-    queryPickler = genericQueryPickler $ defaultOptions
-        { constructorTagModifier = \s -> fromMaybe s $ stripPrefix "Prefix" s
+    queryPickler = genericQueryPickler $ defaultQueryOptions
+        { queryCtorModifier = \s -> fromMaybe s $ stripPrefix "Prefix" s
         }
 
 instance Arbitrary Fred where
@@ -129,8 +129,8 @@ data Plugh = Plugh
     } deriving (Eq, Show, Generic)
 
 instance IsQuery Plugh where
-    queryPickler = genericQueryPickler $ defaultOptions
-        { fieldLabelModifier = reverse
+    queryPickler = genericQueryPickler $ defaultQueryOptions
+        { queryFieldModifier = reverse
         }
 
 instance Arbitrary Plugh where

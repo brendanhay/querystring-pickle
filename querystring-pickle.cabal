@@ -1,5 +1,5 @@
 name:                  querystring-pickle
-version:               0.1.4
+version:               0.1.5
 synopsis:              Picklers for de/serialising Generic data types to and from query strings
 license:               OtherLicense
 license-file:          LICENSE
@@ -47,9 +47,9 @@ test-suite querystring-pickle-tests
         -fwarn-tabs
 
     build-depends:
-        test-framework             >= 0.8
-      , test-framework-quickcheck2 >= 0.3
-      , QuickCheck                 >= 2.5
-      , base                       >= 4.6 && < 5
+        base                       >= 4.6 && < 5
       , bytestring
       , querystring-pickle
+      , QuickCheck                 >= 2.5
+      , test-framework             >= 0.8
+      , test-framework-quickcheck2 >= 0.3
