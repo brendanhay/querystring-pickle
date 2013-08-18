@@ -41,6 +41,12 @@ main = defaultMain
         ]
     ]
 
+instance IsQuery a => IsQuery (Maybe a) where
+    queryPickler = qpOption queryPickler
+
+instance (IsQuery a, IsQuery b) => IsQuery (Either a b) where
+    queryPickler = queryPickler `qpEither` queryPickler
+
 data Foo = Foo
     { fooInt        :: Int
     , fooByteString :: ByteString

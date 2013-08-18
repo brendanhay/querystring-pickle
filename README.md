@@ -7,7 +7,8 @@
 
 * [Introduction](#introduction)
 * [Examples](#examples)
-* [Caveats](#caveats)
+* [Common Instances](#common-instances)
+  - [Either/Maybe](#either-maybe)
 * [Compatibility](#compatibility)
 * [Contributing](#contributing)
 * [Licence](#licence)
@@ -23,7 +24,9 @@
 > TODO
 
 
-## Caveats
+## Common Instances
+
+### Either/Maybe
 
 `IsQuery` instances for `Maybe a` and `Either a b` are not supplied due to
 ambiguous semantics, take the following example:
@@ -80,6 +83,9 @@ of binding `c` will succeed.
 This is due to the overly simple underlying rose tree used
 as the intermediate data structure for query transforms.
 Something that will hopefully be fixed in a future release.
+
+It is left up to the consumer of the library to decide best how to handle this
+case. I apologies if it forces anyone to use orhaned instances.
 
 
 ## Compatibility

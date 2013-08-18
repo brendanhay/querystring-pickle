@@ -389,12 +389,6 @@ qpOrdinalList = PU
 -- Instances
 --
 
-instance IsQuery a => IsQuery (Maybe a) where
-    queryPickler = qpOption queryPickler
-
-instance (IsQuery a, IsQuery b) => IsQuery (Either a b) where
-    queryPickler = queryPickler `qpEither` queryPickler
-
 instance IsQuery Int where
     queryPickler = qpPrim
 
