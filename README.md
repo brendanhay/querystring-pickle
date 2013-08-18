@@ -26,6 +26,11 @@
 
 ## Common Instances
 
+### Lists
+
+> TODO
+
+
 ### Either/Maybe
 
 `IsQuery` instances for `Maybe a` and `Either a b` are not supplied due to
