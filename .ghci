@@ -11,13 +11,13 @@ import           System.IO
 
 hSetBuffering stdout LineBuffering
 
-data A = B | C deriving (Show, Generic)
+data A = A { aInt :: Int } deriving (Show, Generic)
+data B = B { bA :: Maybe A } deriving (Show, Generic)
+data C = C { cB :: B } deriving (Show, Generic)
 
 instance IsQuery A
+instance IsQuery B
+instance IsQuery C
 
-data R = R { rA :: A } deriving (Show, Generic)
-
-instance IsQuery R
-
-let r = R C
-
+let b = C $ B Nothing
+let qry = toQuery b

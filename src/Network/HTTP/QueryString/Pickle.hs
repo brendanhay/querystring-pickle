@@ -179,7 +179,7 @@ instance CtorIsQuery a => GIsQuery (C1 c a) where
 
 instance ( AllNullary  (a :+: b) allNullary
          , NullIsQuery (a :+: b) allNullary
-         ) => GIsQuery  (a :+: b) where
+         ) => GIsQuery (a :+: b) where
     -- Nullary Constructors
     gQueryPickler opts =
         (unTagged :: Tagged allNullary (PU ((a :+: b) d)) -> (PU ((a :+: b) d)))
@@ -307,7 +307,6 @@ qpElem name pu = PU
     note qry Nothing = Left $
         "qpElem: non-locatable - " ++ BS.unpack name ++ " - " ++ show qry
 
-    -- FIXME: The list match shouldn't recurse into the tree
     findPair k qry
         | List qs <- qry           = foldl' (<>) mempty $ map (findPair k) qs
         | Pair k' q <- qry, k == k' = Just q
@@ -389,12 +388,6 @@ qpOrdinalList = PU
 --
 -- Instances
 --
-
-instance (IsQuery a, IsQuery b) => IsQuery (Either a b) where
-    queryPickler = qpEither queryPickler queryPickler
-
-instance IsQuery () where
-    queryPickler = qpLift ()
 
 instance IsQuery Int where
     queryPickler = qpPrim

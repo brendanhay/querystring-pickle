@@ -33,7 +33,6 @@ main = defaultMain
         , testProperty "Nested"  (query :: Iso Bar)
         , testProperty "Nullary" (query :: Iso Qux)
         , testProperty "Maybe"   (query :: Iso Baz)
-        , testProperty "Either"  (query :: Iso Garply)
         , testProperty "Complex" (query :: Iso Waldo)
         ]
     , testGroup "Generic Option Modifiers"
@@ -43,8 +42,8 @@ main = defaultMain
     ]
 
 data Foo = Foo
-    { fooInt1        :: Int
-    , fooByteString2 :: ByteString
+    { fooInt        :: Int
+    , fooByteString :: ByteString
     } deriving (Eq, Show, Generic)
 
 instance IsQuery Foo
@@ -81,25 +80,17 @@ instance IsQuery Baz
 instance Arbitrary Baz where
     arbitrary = Baz <$> arbitrary
 
-data Garply = Garply
-    { graplyByteString :: ByteString
-    , graplyFooBS      :: Either Foo ByteString
-    } deriving (Eq, Show, Generic)
-
-instance IsQuery Garply
-
-instance Arbitrary Garply where
-    arbitrary = Garply <$> arbitrary <*> arbitrary
-
 data Waldo = Waldo
-    { waldoEither     :: Either Baz Qux
-    , waldoMaybe      :: Maybe Foo
+    { waldoBaz   :: Baz
+    , waldoMaybe :: Maybe Foo
     } deriving (Eq, Show, Generic)
 
 instance IsQuery Waldo
 
 instance Arbitrary Waldo where
-    arbitrary = Waldo <$> arbitrary <*> arbitrary
+    arbitrary = Waldo
+        <$> arbitrary
+        <*> arbitrary
 
 data Fred = PrefixXyzzy | PrefixThud
     deriving (Eq, Show, Generic)
