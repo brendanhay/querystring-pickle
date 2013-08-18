@@ -12,7 +12,7 @@
 {-# LANGUAGE UndecidableInstances            #-}
 {-# LANGUAGE ViewPatterns                    #-}
 
-{-# OPTIONS_GHC -fno-warn-missing-signatures #-}
+-- {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 
 -- Module      : Network.HTTP.QueryString.Pickle
 -- Copyright   : (c) 2013 Brendan Hay <brendan.g.hay@gmail.com>
@@ -27,7 +27,7 @@
 module Network.HTTP.QueryString.Pickle
     (
     -- * Class
-      IsQuery (..)
+      IsQuery      (..)
 
     -- * Functions
     , toQuery
@@ -36,13 +36,13 @@ module Network.HTTP.QueryString.Pickle
     , decodeQuery
 
     -- * Data Types
-    , Query   (..)
-    , PU      (..)
+    , Query        (..)
+    , QueryPU      (..)
 
     -- * Options
-    , Options (..)
-    , defaultOptions
-    , loweredOptions
+    , QueryOptions (..)
+    , defaultQueryOptions
+    , loweredQueryOptions
 
     -- * Generics
     , genericQueryPickler
@@ -97,7 +97,7 @@ import           GHC.Generics
 --
 -- @
 -- instance IsQuery Foo where
---     queryPickler = 'genericQueryPickler' 'defaultOptions'
+--     queryPickler = 'genericQueryPickler' 'defaultQueryOptions'
 -- @
 --
 -- More examples of creating 'queryPickler' implementations can be found in the
@@ -106,7 +106,7 @@ class IsQuery a where
     queryPickler :: PU a
 
     default queryPickler :: (Generic a, GIsQuery (Rep a)) => PU a
-    queryPickler = genericQueryPickler defaultOptions
+    queryPickler = genericQueryPickler defaultQueryOptions
 
 -- | Internal tree representation for queries.
 data Query
@@ -134,10 +134,12 @@ instance Monoid Query where
     mappend l        r        = List [l, r]
 
 -- | Pairing of pickler to unpickler.
-data PU a = PU
+data QueryPU a = QueryPU
     { pickle   :: a -> Query
     , unpickle :: Query -> Either String a
     }
+
+type PU = QueryPU
 
 -- | Options for 'genericQueryPickler' to parameterise how constructor and record
 -- field labels are un/pickled.
@@ -150,31 +152,31 @@ data PU a = PU
 --
 -- instance IsQuery Foo where
 --     queryPickler = 'genericQueryPickler' $ Options
---         { constructorTagModifier = id
---         , fieldLabelModifier     = dropWhile isLower
+--         { queryCtorModifier  = id
+--         , queryFieldModifier = dropWhile isLower
 --         }
 -- @
 --
 -- Would remove @bar@ from the record field @barThisIsAByteString@ so the resulting
 -- pair for that field in the association list would be @(ThisIsAByteString, n :: Int)@.
 --
--- The above example is how 'defaultOptions' behaves.
-data Options = Options
-    { constructorTagModifier :: String -> String
+-- The above example is how 'defaultQueryOptions' behaves.
+data QueryOptions = QueryOptions
+    { queryCtorModifier  :: String -> String
       -- ^ Function applied to constructor tags.
-    , fieldLabelModifier     :: String -> String
+    , queryFieldModifier :: String -> String
       -- ^ Function applied to record field labels.
     }
 
 -- | Strips lowercase prefixes from record fields.
-defaultOptions :: Options
-defaultOptions = Options id (dropWhile isLower)
+defaultQueryOptions :: QueryOptions
+defaultQueryOptions = QueryOptions id (dropWhile isLower)
 
 -- | Strips lowercase prefixes from record fields and subsequently lowercases
 -- the remaining identifier.
-loweredOptions :: Options
-loweredOptions = defaultOptions
-    { fieldLabelModifier = map toLower . dropWhile isLower
+loweredQueryOptions :: QueryOptions
+loweredQueryOptions = defaultQueryOptions
+    { queryFieldModifier = map toLower . dropWhile isLower
     }
 
 --
@@ -228,7 +230,7 @@ genericQueryPickler opts =
     (to, from) `qpWrap` (gQueryPickler opts) (genericQueryPickler opts)
 
 class GIsQuery f where
-    gQueryPickler :: Options -> PU a -> PU (f a)
+    gQueryPickler :: QueryOptions -> PU a -> PU (f a)
 
 instance IsQuery a => GIsQuery (K1 i a) where
     -- Constants
@@ -259,24 +261,24 @@ instance ( AllNullary  (a :+: b) allNullary
 --
 
 class NullIsQuery f allNullary where
-    nullQueryPickler :: Options -> PU a -> Tagged allNullary (PU (f a))
+    nullQueryPickler :: QueryOptions -> PU a -> Tagged allNullary (PU (f a))
 
 instance SumIsQuery (a :+: b) => NullIsQuery (a :+: b) True where
     nullQueryPickler opts _ = Tagged $ sumQueryPickler opts
 
 class SumIsQuery f where
-    sumQueryPickler :: Options -> PU (f a)
+    sumQueryPickler :: QueryOptions -> PU (f a)
 
 instance (SumIsQuery a, SumIsQuery b) => SumIsQuery (a :+: b) where
     sumQueryPickler opts = sumQueryPickler opts `qpSum` sumQueryPickler opts
 
 instance Constructor c => SumIsQuery (C1 c U1) where
-    sumQueryPickler opts = PU
+    sumQueryPickler opts = QueryPU
         { pickle   = const $ Value name
         , unpickle = valueExists
         }
       where
-        name = BS.pack . constructorTagModifier opts $ conName (undefined :: t c U1 p)
+        name = BS.pack . queryCtorModifier opts $ conName (undefined :: t c U1 p)
 
         valueExists qry
             | (List [Value v]) <- qry, v == name = Right $ M1 U1
@@ -288,10 +290,10 @@ instance Constructor c => SumIsQuery (C1 c U1) where
 --
 
 class CtorIsQuery f where
-    ctorQueryPickler :: Options -> PU a -> PU (f a)
+    ctorQueryPickler :: QueryOptions -> PU a -> PU (f a)
 
 class CtorIsQuery' f isRecord where
-    ctorQueryPickler' :: Options -> PU a -> Tagged isRecord (PU (f a))
+    ctorQueryPickler' :: QueryOptions -> PU a -> Tagged isRecord (PU (f a))
 
 instance (IsRecord f isRecord, CtorIsQuery' f isRecord) => CtorIsQuery f where
     ctorQueryPickler opts = (unTagged :: Tagged isRecord (PU (f a)) -> PU (f a))
@@ -300,8 +302,11 @@ instance (IsRecord f isRecord, CtorIsQuery' f isRecord) => CtorIsQuery f where
 instance RecIsQuery f => CtorIsQuery' f True where
     ctorQueryPickler' opts = Tagged . recQueryPickler opts
 
+instance GIsQuery f => CtorIsQuery' f False where
+    ctorQueryPickler' opts = Tagged . gQueryPickler opts
+
 class RecIsQuery f where
-    recQueryPickler :: Options -> PU a -> PU (f a)
+    recQueryPickler :: QueryOptions -> PU a -> PU (f a)
 
 instance (RecIsQuery a, RecIsQuery b) => RecIsQuery (a :*: b) where
     recQueryPickler opts f = qpWrap
@@ -310,7 +315,7 @@ instance (RecIsQuery a, RecIsQuery b) => RecIsQuery (a :*: b) where
 
 instance (Selector s, GIsQuery a) => RecIsQuery (S1 s a) where
     recQueryPickler opts f = qpElem
-        (BS.pack . fieldLabelModifier opts $ selName (undefined :: S1 s f r))
+        (BS.pack . queryFieldModifier opts $ selName (undefined :: S1 s f r))
         ((M1, unM1) `qpWrap` gQueryPickler opts f)
 
 instance (Selector s, IsQuery a) => RecIsQuery (S1 s (K1 i (Maybe a))) where
@@ -318,7 +323,7 @@ instance (Selector s, IsQuery a) => RecIsQuery (S1 s (K1 i (Maybe a))) where
         (M1 . K1, unK1 . unM1) `qpWrap` qpOption (qpElem name queryPickler)
       where
         name = BS.pack
-            . fieldLabelModifier opts
+            . queryFieldModifier opts
             $ selName (undefined :: t s (K1 i (Maybe a)) p)
 
 --
@@ -361,13 +366,13 @@ newtype Tagged s b = Tagged { unTagged :: b }
 --
 
 qpWrap :: (a -> b, b -> a) -> PU a -> PU b
-qpWrap (f, g) pua = PU
+qpWrap (f, g) pua = QueryPU
     { pickle   = pickle pua . g
     , unpickle = fmap f . unpickle pua
     }
 
 qpElem :: ByteString -> PU a -> PU a
-qpElem name pu = PU
+qpElem name pu = QueryPU
     { pickle   = Pair name . pickle pu
     , unpickle = \qry -> (unpickle pu =<<) . note qry $ findPair name qry
     }
@@ -380,7 +385,7 @@ qpElem name pu = PU
         | otherwise                 = Nothing
 
 qpPair :: PU a -> PU b -> PU (a, b)
-qpPair pua pub = PU
+qpPair pua pub = QueryPU
     { pickle   = \(a, b) -> pickle pua a <> pickle pub b
     , unpickle = \qry -> case (unpickle pua qry, unpickle pub qry) of
           (Right a, Right b) -> Right (a, b)
@@ -391,13 +396,13 @@ qpPair pua pub = PU
     failure qry s = Left ("qpPair: " ++ s ++ ", qry: " ++ show qry)
 
 qpLift :: a -> PU a
-qpLift x = PU
+qpLift x = QueryPU
     { pickle   = const $ List []
     , unpickle = const $ Right x
     }
 
 qpPrim :: (Read a, Show a) => PU a
-qpPrim = PU
+qpPrim = QueryPU
     { pickle   = Value . BS.pack . show
     , unpickle = (eitherRead =<<) . findValue
     }
@@ -412,13 +417,13 @@ qpPrim = PU
         | otherwise = Left $ "qpPrim: unexpected non-value - " ++ show qry
 
 qpOption :: PU a -> PU (Maybe a)
-qpOption pu = PU
+qpOption pu = QueryPU
     { pickle   = maybe (List []) (pickle pu)
     , unpickle = either (const $ Right Nothing) (Right . Just) . unpickle pu
     }
 
 qpDefault :: a -> PU a -> PU a
-qpDefault x pu = PU
+qpDefault x pu = QueryPU
     { pickle    = pickle pu
     , unpickle  = either (const $ Right x) Right . unpickle pu
     }
@@ -433,7 +438,7 @@ qpSum left right = (inp, out) `qpWrap` qpEither left right
     out (R1 x) = Right x
 
 qpEither :: PU a -> PU b -> PU (Either a b)
-qpEither pua pub = PU pickleEither unpickleEither
+qpEither pua pub = QueryPU pickleEither unpickleEither
   where
     unpickleEither qry = either
         (handleFailure qry)
@@ -447,7 +452,7 @@ qpEither pua pub = PU pickleEither unpickleEither
     pickleEither (Right y) = pickle pub y
 
 qpOrdinalList :: PU a -> PU [a]
-qpOrdinalList pu = PU
+qpOrdinalList pu = QueryPU
     { pickle   = List . zipWith pickler ([1..] :: [Integer])
     , unpickle = \qry -> case qry of
           (List qs) -> concatEithers $ map (unpickle pu) [v | Pair _ v <- sort qs]
@@ -460,7 +465,7 @@ qpOrdinalList pu = PU
             qry         -> (Pair k qry)
 
 qpList :: PU a -> PU [a]
-qpList pu = PU
+qpList pu = QueryPU
     { pickle   = mconcat . map (pickle pu)
     , unpickle = \qry -> case qry of
           v@(Value _) -> fmap (:[]) $ unpickle pu v
@@ -485,7 +490,7 @@ instance IsQuery Integer where
     queryPickler = qpPrim
 
 instance IsQuery ByteString where
-    queryPickler = PU
+    queryPickler = QueryPU
         { pickle   = Value
         , unpickle = \qry -> case qry of
               (Value v) -> Right v
