@@ -87,15 +87,15 @@ data Query
       deriving (Eq, Show)
 
 instance Ord Query where
-  compare (List  ls)  (List  rs)  = ls `compare` rs
-  compare (Pair k1 _) (Pair k2 _) = k1 `compare` k2
-  compare (Value v1)  (Value v2)  = v1 `compare` v2
+    compare (List  ls)  (List  rs)  = ls `compare` rs
+    compare (Pair k1 _) (Pair k2 _) = k1 `compare` k2
+    compare (Value v1)  (Value v2)  = v1 `compare` v2
 
-  compare (List _)   (Pair _ _) = GT
-  compare (List _)   (Value _)  = GT
-  compare (Pair _ _) (Value _)  = GT
+    compare (List _)   (Pair _ _) = GT
+    compare (List _)   (Value _)  = GT
+    compare (Pair _ _) (Value _)  = GT
 
-  compare _ _ = LT
+    compare _ _ = LT
 
 instance Monoid Query where
     mempty                    = List []
