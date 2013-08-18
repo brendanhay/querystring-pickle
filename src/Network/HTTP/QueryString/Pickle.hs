@@ -27,7 +27,7 @@
 module Network.HTTP.QueryString.Pickle
     (
     -- * Class
-      IsQuery             (..)
+      IsQuery (..)
 
     -- * Functions
     , toQuery
@@ -36,13 +36,13 @@ module Network.HTTP.QueryString.Pickle
     , decodeQuery
 
     -- * Data Types
-    , Query               (..)
-    , PU                  (..)
+    , Query   (..)
+    , PU      (..)
 
     -- * Options
-    , GenericQueryOptions (..)
-    , defaultQueryOptions
-    , loweredQueryOptions
+    , Options (..)
+    , defaultOptions
+    , loweredOptions
 
     -- * Generics
     , genericQueryPickler
@@ -106,7 +106,7 @@ class IsQuery a where
     queryPickler :: PU a
 
     default queryPickler :: (Generic a, GIsQuery (Rep a)) => PU a
-    queryPickler = genericQueryPickler defaultQueryOptions
+    queryPickler = genericQueryPickler defaultOptions
 
 -- | Internal tree representation for queries.
 data Query
@@ -159,23 +159,21 @@ data PU a = PU
 -- pair for that field in the association list would be @(ThisIsAByteString, n :: Int)@.
 --
 -- The above example is how 'defaultOptions' behaves.
-data GenericQueryOptions = GenericQueryOptions
+data Options = Options
     { constructorTagModifier :: String -> String
       -- ^ Function applied to constructor tags.
     , fieldLabelModifier     :: String -> String
       -- ^ Function applied to record field labels.
     }
 
-type Options = GenericQueryOptions
-
 -- | Strips lowercase prefixes from record fields.
-defaultQueryOptions :: Options
-defaultQueryOptions = GenericQueryOptions id (dropWhile isLower)
+defaultOptions :: Options
+defaultOptions = Options id (dropWhile isLower)
 
 -- | Strips lowercase prefixes from record fields and subsequently lowercases
 -- the remaining identifier.
-loweredQueryOptions :: Options
-loweredQueryOptions = defaultQueryOptions
+loweredOptions :: Options
+loweredOptions = defaultOptions
     { fieldLabelModifier = map toLower . dropWhile isLower
     }
 

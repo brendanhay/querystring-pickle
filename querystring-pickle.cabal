@@ -1,5 +1,5 @@
 name:                  querystring-pickle
-version:               0.1.1
+version:               0.1.2
 synopsis:              Picklers for de/serialising Generic data types to and from query strings
 license:               OtherLicense
 license-file:          LICENSE
