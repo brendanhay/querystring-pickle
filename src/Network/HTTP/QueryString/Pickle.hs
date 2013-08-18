@@ -244,13 +244,13 @@ instance (Selector s, GIsQuery a) => RecIsQuery (S1 s a) where
         (BS.pack . fieldLabelModifier opts $ selName (undefined :: S1 s f r))
         ((M1, unM1) `qpWrap` gQueryPickler opts f)
 
-instance (Selector s, IsQuery a) => RecIsQuery (S1 s (K1 i (Maybe a))) where
-    recQueryPickler opts _ =
-        (M1 . K1, unK1 . unM1) `qpWrap` qpOption (qpElem name queryPickler)
-      where
-        name = BS.pack
-            . fieldLabelModifier opts
-            $ selName (undefined :: t s (K1 i (Maybe a)) p)
+-- instance (Selector s, IsQuery a) => RecIsQuery (S1 s (K1 i (Maybe a))) where
+--     recQueryPickler opts _ =
+--         (M1 . K1, unK1 . unM1) `qpWrap` qpOption (qpElem name queryPickler)
+--       where
+--         name = BS.pack
+--             . fieldLabelModifier opts
+--             $ selName (undefined :: t s (K1 i (Maybe a)) p)
 
 --
 -- Tagging
@@ -347,7 +347,7 @@ qpPrim = PU
 qpOption :: PU a -> PU (Maybe a)
 qpOption pu = PU
     { pickle   = maybe (List []) (pickle pu)
-    , unpickle = either (const $ Right Nothing) (Right . Just) . unpickle pu
+    , unpickle = fmap Just . unpickle pu
     }
 
 qpSum :: PU (f r) -> PU (g r) -> PU ((f :+: g) r)
@@ -388,6 +388,9 @@ qpOrdinalList = PU
 --
 -- Instances
 --
+
+instance (IsQuery a, IsQuery b) => IsQuery (Either a b) where
+    queryPickler = queryPickler `qpEither` queryPickler
 
 instance IsQuery Int where
     queryPickler = qpPrim

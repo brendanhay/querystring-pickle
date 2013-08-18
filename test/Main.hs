@@ -73,12 +73,13 @@ instance Arbitrary Qux where
 
 data Baz = Baz
     { bazFoo :: Maybe Foo
+    , bazInt :: Int
     } deriving (Eq, Show, Generic)
 
 instance IsQuery Baz
 
 instance Arbitrary Baz where
-    arbitrary = Baz <$> arbitrary
+    arbitrary = Baz <$> arbitrary <*> arbitrary
 
 data Waldo = Waldo
     { waldoBaz   :: Baz

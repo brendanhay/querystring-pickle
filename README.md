@@ -25,14 +25,17 @@
 
 ## Caveats
 
-### Maybe
+An `IsQuery` instance for `Maybe a` is supplied and it is left
+up to the consumer of the library to implement them. (Apologies for forcing
+orphan-instances on anybody.)
 
-`Maybe a` types are supported at the Generic level but this introduces a subtle
-disclaimer (which will hopefully be rectified in future.):
-
-Take the following example:
+The reasoning is the desired behaviour of the de/serialisers for both types is
+ambiguous, take the following naive instance declarations:
 
 ```haskell
+instance IsQuery a => IsQuery (Maybe a) where
+    queryPickler = qpOption queryPickler
+
 data A = A { aInt :: Int } deriving (Show, Generic)
 data B = B { bA :: Maybe A } deriving (Show, Generic)
 data C = C { cB :: B } deriving (Show, Generic)
@@ -47,23 +50,19 @@ let b = C $ B Nothing
 Running `toQuery` / `fromQuery` on the example yields:
 
 ```haskell
-ghci: let qry = toQuery b
+ghci: let bQry = toQuery b
 []
 
-ghci: fromQuery qry :: Either String C
+ghci: fromQuery bQry :: Either String C
 Left "qpElem: non-locatable - B - List []"
 ```
 
-If data type `B` has a second non-optional field, the de/serialisation
-will succeed.
+If data type `B` has a second non-optional field, the
+de/serialisation will succeed.
 
 This is due to the overly simple underlying rose tree used
 as the intermediate data structure for query transforms.
 Something that will hopefully be fixed in a future release.
-
-### Either
-
-> TODO
 
 
 ## Compatibility
