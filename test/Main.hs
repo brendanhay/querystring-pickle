@@ -151,8 +151,9 @@ data Isomorphism a = Iso
 
 instance (Eq a, Arbitrary a, IsQuery a) => Arbitrary (Isomorphism a) where
     arbitrary = do
-        i <- arbitrary
-        return $ Iso i (toQuery i) (fromQuery $ toQuery i)
+        inp <- arbitrary
+        let qry = toQuery inp
+        return . Iso i inp $ fromQuery inp
 
 query :: (Eq a, Arbitrary a, IsQuery a) => Isomorphism a -> Bool
 query (Iso d _ i) = either (const False) (== d) i

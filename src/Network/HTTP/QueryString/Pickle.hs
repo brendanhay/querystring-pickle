@@ -242,7 +242,7 @@ instance GIsQuery U1 where
 
 instance GIsQuery a => GIsQuery (M1 i d a) where
     -- Discard Metadata
-     gQueryPickler opts = qpWrap (M1, unM1) . gQueryPickler opts
+    gQueryPickler opts = qpWrap (M1, unM1) . gQueryPickler opts
 
 instance CtorIsQuery a => GIsQuery (C1 c a) where
     -- Constructor Encoding
@@ -315,7 +315,7 @@ instance (RecIsQuery a, RecIsQuery b) => RecIsQuery (a :*: b) where
 
 instance (Selector s, GIsQuery a) => RecIsQuery (S1 s a) where
     recQueryPickler opts f = qpElem
-        (BS.pack . queryFieldModifier opts $ selName (undefined :: S1 s f r))
+        (BS.pack . queryFieldModifier opts $ selName (undefined :: S1 s a r))
         ((M1, unM1) `qpWrap` gQueryPickler opts f)
 
 instance (Selector s, IsQuery a) => RecIsQuery (S1 s (K1 i (Maybe a))) where
