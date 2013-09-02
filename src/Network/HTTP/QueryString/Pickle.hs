@@ -459,10 +459,7 @@ qpOrdinalList pu = QueryPU
           _         -> Left $ "qpOrdinalList: unexpected non-list - " ++ show qry
     }
   where
-    pickler (BS.pack . show -> k) x =
-        case pickle pu x of
-            (Pair k' v) -> Pair k' (Pair k v)
-            qry         -> (Pair k qry)
+    pickler (BS.pack . show -> k) = Pair k . pickle pu
 
 qpList :: PU a -> PU [a]
 qpList pu = QueryPU
