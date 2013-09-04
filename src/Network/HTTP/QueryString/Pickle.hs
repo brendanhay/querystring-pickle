@@ -61,13 +61,15 @@ module Network.HTTP.QueryString.Pickle
     , qpList
     ) where
 
-import           Data.Char     (isLower, toLower)
+import           Data.ByteString       (ByteString)
+import qualified Data.ByteString.Char8 as BS
+import           Data.Char             (isLower, toLower)
 import           Data.Either
-import           Data.Foldable (foldl')
-import           Data.List     (sort)
+import           Data.Foldable         (foldl')
+import           Data.List             (sort)
 import           Data.Monoid
-import           Data.Text     (Text)
-import qualified Data.Text     as Text
+import           Data.Text             (Text)
+import           Data.Text.Encoding
 import           GHC.Generics
 
 --
@@ -111,8 +113,8 @@ class IsQuery a where
 -- | Internal tree representation for queries.
 data Query
     = List [Query]
-    | Pair Text Query
-    | Value Text
+    | Pair ByteString Query
+    | Value ByteString
       deriving (Eq, Show)
 
 instance Ord Query where
@@ -148,7 +150,7 @@ type PU = QueryPU
 --
 -- @import GHC.Generics
 --
--- data Bar { barThisIsAText :: Text } deriving (Generic)
+-- data Bar { barThisIsAByteString :: ByteString } deriving (Generic)
 --
 -- instance IsQuery Foo where
 --     queryPickler = 'genericQueryPickler' $ Options
@@ -157,8 +159,8 @@ type PU = QueryPU
 --         }
 -- @
 --
--- Would remove @bar@ from the record field @barThisIsAText@ so the resulting
--- pair for that field in the association list would be @(ThisIsAText, n :: Int)@.
+-- Would remove @bar@ from the record field @barThisIsAByteString@ so the resulting
+-- pair for that field in the association list would be @(ThisIsAByteString, n :: Int)@.
 --
 -- The above example is how 'defaultQueryOptions' behaves.
 data QueryOptions = QueryOptions
@@ -184,43 +186,42 @@ loweredQueryOptions = defaultQueryOptions
 --
 
 -- | Pickle a data type with an 'IsQuery' instance to an association list.
-toQuery :: IsQuery a => a -> [(Text, Text)]
+toQuery :: IsQuery a => a -> [(ByteString, ByteString)]
 toQuery = enc "" . pickle queryPickler
   where
     enc k (List qs) = concatMap (enc k) qs
     enc k (Value v) = [(k, v)]
     enc k (Pair k' q)
-        | Text.null k = enc k' q
+        | BS.null k = enc k' q
         | otherwise = enc (k <> "." <> k') q
 
 -- | Unpickle an association list to an 'IsQuery' type, returning an error
 -- message when unpickling fails.
-fromQuery :: IsQuery a => [(Text, Text)] -> Either String a
+fromQuery :: IsQuery a => [(ByteString, ByteString)] -> Either String a
 fromQuery = unpickle queryPickler . foldl' (\a b -> reify b <> a) mempty
   where
     reify (k, v)
-        | Text.null k         = Value v
-        | Text.any (== '.') k =
-              let ks     = Text.split (== '.') k
-                  f k' q = Pair k' q
-              in foldr f (Pair (last ks) $ Value v) $ init ks
-        | otherwise         = Pair k $ Value v
+        | BS.null k       = Value v
+        | '.' `BS.elem` k = let ks     = BS.split '.' k
+                                f k' q = Pair k' q
+                             in foldr f (Pair (last ks) $ Value v) $ init ks
+        | otherwise       = Pair k $ Value v
 
 -- | Helper to encode an association list as a single canonical query string.
-encodeQuery :: (Text -> Text) -- ^ URL Value Encoder
-            -> [(Text, Text)] -- ^ Key/Value Pairs
-            -> Text
-encodeQuery f = Text.intercalate "&" . map (\(k, v) -> mconcat [k, "=", f v]) . sort
+encodeQuery :: (ByteString -> ByteString) -- ^ URL Value Encoder
+            -> [(ByteString, ByteString)] -- ^ Key/Value Pairs
+            -> ByteString
+encodeQuery f = BS.intercalate "&" . map (\(k, v) -> mconcat [k, "=", f v]) . sort
 
 -- | Helper to decode a query string to an association list.
-decodeQuery :: (Text -> Text) -- ^ URL Value Decoder
-            -> Text                 -- ^ Input Query String
-            -> [(Text, Text)]
-decodeQuery f = map (pair . Text.split (== '='))
-    . Text.split (== '&')
-    . Text.dropWhile (\c -> c == '/' || c == '?')
+decodeQuery :: (ByteString -> ByteString) -- ^ URL Value Decoder
+            -> ByteString                 -- ^ Input Query String
+            -> [(ByteString, ByteString)]
+decodeQuery f = map (pair . BS.split '=')
+    . BS.split '&'
+    . BS.dropWhile (\c -> c == '/' || c == '?')
   where
-    pair (k:vs) = (k, f $ Text.intercalate "=" vs)
+    pair (k:vs) = (k, f $ BS.intercalate "=" vs)
     pair []     = ("", "")
 
 --
@@ -279,12 +280,12 @@ instance Constructor c => SumIsQuery (C1 c U1) where
         , unpickle = valueExists
         }
       where
-        name = Text.pack . queryCtorModifier opts $ conName (undefined :: t c U1 p)
+        name = BS.pack . queryCtorModifier opts $ conName (undefined :: t c U1 p)
 
         valueExists qry
             | (List [Value v]) <- qry, v == name = Right $ M1 U1
             | (Value v)        <- qry, v == name = Right $ M1 U1
-            | otherwise = Left . Text.unpack $ "valueExists: failure - " <> name
+            | otherwise = Left . BS.unpack $ "valueExists: failure - " <> name
 
 --
 -- Records
@@ -316,14 +317,14 @@ instance (RecIsQuery a, RecIsQuery b) => RecIsQuery (a :*: b) where
 
 instance (Selector s, GIsQuery a) => RecIsQuery (S1 s a) where
     recQueryPickler opts f = qpElem
-        (Text.pack . queryFieldModifier opts $ selName (undefined :: S1 s a r))
+        (BS.pack . queryFieldModifier opts $ selName (undefined :: S1 s a r))
         ((M1, unM1) `qpWrap` gQueryPickler opts f)
 
 instance (Selector s, IsQuery a) => RecIsQuery (S1 s (K1 i (Maybe a))) where
     recQueryPickler opts _ =
         (M1 . K1, unK1 . unM1) `qpWrap` qpOption (qpElem name queryPickler)
       where
-        name = Text.pack
+        name = BS.pack
             . queryFieldModifier opts
             $ selName (undefined :: t s (K1 i (Maybe a)) p)
 
@@ -372,7 +373,7 @@ qpWrap (f, g) pua = QueryPU
     , unpickle = fmap f . unpickle pua
     }
 
-qpElem :: Text -> PU a -> PU a
+qpElem :: ByteString -> PU a -> PU a
 qpElem name pu = QueryPU
     { pickle   = Pair name . pickle pu
     , unpickle = \qry -> (unpickle pu =<<) . note qry $ findPair name qry
@@ -404,11 +405,11 @@ qpLift x = QueryPU
 
 qpPrim :: (Read a, Show a) => PU a
 qpPrim = QueryPU
-    { pickle   = Value . Text.pack . show
+    { pickle   = Value . BS.pack . show
     , unpickle = (eitherRead =<<) . findValue
     }
   where
-    eitherRead (Text.unpack -> s) = case reads s of
+    eitherRead (BS.unpack -> s) = case reads s of
         [(x, "")] -> Right x
         _         -> Left $ "qpPrim: failed to read value - " ++ s
 
@@ -460,7 +461,7 @@ qpOrdinalList pu = QueryPU
           _         -> Left $ "qpOrdinalList: unexpected non-list - " ++ show qry
     }
   where
-    pickler (Text.pack . show -> k) = Pair k . pickle pu
+    pickler (BS.pack . show -> k) = Pair k . pickle pu
 
 qpList :: PU a -> PU [a]
 qpList pu = QueryPU
@@ -487,10 +488,13 @@ instance IsQuery Int where
 instance IsQuery Integer where
     queryPickler = qpPrim
 
-instance IsQuery Text where
+instance IsQuery ByteString where
     queryPickler = QueryPU
         { pickle   = Value
         , unpickle = \qry -> case qry of
               (Value v) -> Right v
-              _         -> Left $ "IsQuery Text: unexpected non-value - " ++ show qry
+              _         -> Left $ "qpByteString: unexpected non-value - " ++ show qry
         }
+
+instance IsQuery Text where
+    queryPickler = (decodeUtf8, encodeUtf8) `qpWrap` queryPickler
