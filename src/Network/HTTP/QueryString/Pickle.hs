@@ -268,6 +268,10 @@ class NullIsQuery f allNullary where
 instance SumIsQuery (a :+: b) => NullIsQuery (a :+: b) True where
     nullQueryPickler opts _ = Tagged $ sumQueryPickler opts
 
+instance (GIsQuery a, GIsQuery b) => NullIsQuery (a :+: b) False where
+    nullQueryPickler opts f = Tagged $
+        (gQueryPickler opts f `qpSum` gQueryPickler opts f)
+
 class SumIsQuery f where
     sumQueryPickler :: QueryOptions -> PU (f a)
 
@@ -339,6 +343,7 @@ instance IsRecord (M1 S NoSelector f) False
 instance (IsRecord f isRecord) => IsRecord (M1 S c f) isRecord
 instance IsRecord (K1 i c) True
 instance IsRecord U1 False
+
 
 class AllNullary (f :: * -> *) allNullary | f -> allNullary
 
