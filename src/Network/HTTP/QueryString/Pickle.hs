@@ -87,7 +87,7 @@ import           GHC.Generics
 --
 -- import GHC.Generics
 --
--- data Foo { fooIntX :: Int, fooIntY :: Int } deriving (Generic)
+-- data Foo = Foo { fooIntX :: Int, fooIntY :: Int } deriving (Generic)
 --
 -- instance IsQuery Foo
 -- @
@@ -486,6 +486,9 @@ concatEithers xs = case partitionEithers xs of
 --
 -- Instances
 --
+
+instance IsQuery Char where
+    queryPickler = qpPrim
 
 instance IsQuery Int where
     queryPickler = qpPrim
