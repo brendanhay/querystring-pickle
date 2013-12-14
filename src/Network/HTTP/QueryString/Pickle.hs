@@ -63,7 +63,7 @@ module Network.HTTP.QueryString.Pickle
 
 import           Data.ByteString       (ByteString)
 import qualified Data.ByteString.Char8 as BS
-import           Data.Char             (isLower, toLower)
+import           Data.Char             (isUpper, isLower, toLower)
 import           Data.Either
 import           Data.Foldable         (foldl')
 import           Data.List             (sort)
@@ -172,14 +172,19 @@ data QueryOptions = QueryOptions
 
 -- | Strips lowercase prefixes from record fields.
 defaultQueryOptions :: QueryOptions
-defaultQueryOptions = QueryOptions id (dropWhile isLower)
+defaultQueryOptions = QueryOptions id dropLower
 
 -- | Strips lowercase prefixes from record fields and subsequently lowercases
 -- the remaining identifier.
 loweredQueryOptions :: QueryOptions
 loweredQueryOptions = defaultQueryOptions
-    { queryFieldModifier = map toLower . dropWhile isLower
+    { queryFieldModifier = map toLower . dropLower
     }
+
+dropLower :: String -> String
+dropLower s
+     | any isUpper s = dropWhile isLower s
+     | otherwise     = s
 
 --
 -- Functions
@@ -343,7 +348,6 @@ instance IsRecord (M1 S NoSelector f) False
 instance (IsRecord f isRecord) => IsRecord (M1 S c f) isRecord
 instance IsRecord (K1 i c) True
 instance IsRecord U1 False
-
 
 class AllNullary (f :: * -> *) allNullary | f -> allNullary
 
