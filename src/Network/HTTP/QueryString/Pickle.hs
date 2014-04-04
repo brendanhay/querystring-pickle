@@ -45,6 +45,7 @@ module Network.HTTP.QueryString.Pickle
     , loweredQueryOptions
 
     -- * Generics
+    , GIsQuery     (..)
     , genericQueryPickler
 
     -- * Combinators
