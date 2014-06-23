@@ -493,7 +493,12 @@ concatEithers xs = case partitionEithers xs of
 --
 
 instance IsQuery Char where
-    queryPickler = qpPrim
+    queryPickler = QueryPU
+        { pickle   = Value . BS.singleton
+        , unpickle = \qry -> case qry of
+              Value v | BS.length v == 1 -> Right (BS.head v)
+              _ -> Left $ "qpChar: unexpected value - " ++ show qry
+        }
 
 instance IsQuery Int where
     queryPickler = qpPrim
@@ -505,8 +510,8 @@ instance IsQuery ByteString where
     queryPickler = QueryPU
         { pickle   = Value
         , unpickle = \qry -> case qry of
-              (Value v) -> Right v
-              _         -> Left $ "qpByteString: unexpected non-value - " ++ show qry
+              Value v -> Right v
+              _       -> Left $ "qpByteString: unexpected non-value - " ++ show qry
         }
 
 instance IsQuery Text where
