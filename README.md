@@ -1,7 +1,4 @@
-## querystring-pickle
-
-[![Build Status](https://secure.travis-ci.org/brendanhay/querystring-pickle.png)](http://travis-ci.org/brendanhay/querystring-pickle)
-
+# querystring-pickle
 
 ## Table of Contents
 
